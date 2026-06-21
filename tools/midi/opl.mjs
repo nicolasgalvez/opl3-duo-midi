@@ -18,8 +18,10 @@
  * During `play` in a terminal:  n = next   p = prev   space = pause   q = quit
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { basename, extname, join } from 'node:path'
+import { basename, extname, join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { EventEmitter } from 'node:events'
+import http from 'node:http'
 import readline from 'node:readline'
 import easymidi from 'easymidi'
 import toneMidiPkg from '@tonejs/midi'
@@ -301,6 +303,192 @@ async function cmdPlay(argv) {
 }
 
 // --------------------------------------------------------------------------
+//  Web player + visualizer (opl serve)
+//  Playback runs here (any easymidi output device); the browser is a themed UI
+//  fed live MIDI events over Server-Sent Events.
+// --------------------------------------------------------------------------
+
+// Flatten a .mid into plain data events (no closures) for the engine + viz.
+function buildEventList(path, forceCh) {
+  const midi = new Midi(readFileSync(path))
+  const events = []
+  for (const track of midi.tracks) {
+    const ch = forceCh != null ? forceCh - 1 : track.channel
+    if (track.instrument && Number.isInteger(track.instrument.number)) {
+      events.push({ t: 0, k: 'program', c: ch, a: track.instrument.number, b: 0 })
+    }
+    for (const n of track.notes) {
+      const vel = Math.max(1, Math.round(n.velocity * 127))
+      events.push({ t: n.time, k: 'on', c: ch, a: n.midi, b: vel })
+      events.push({ t: n.time + n.duration, k: 'off', c: ch, a: n.midi, b: 0 })
+    }
+    for (const num of Object.keys(track.controlChanges)) {
+      for (const cc of track.controlChanges[num]) {
+        events.push({ t: cc.time, k: 'cc', c: ch, a: cc.number, b: Math.round(cc.value * 127) })
+      }
+    }
+    for (const pb of track.pitchBends) {
+      events.push({ t: pb.time, k: 'pitch', c: ch, a: Math.round(((pb.value + 1) / 2) * 16383), b: 0 })
+    }
+  }
+  events.sort((x, y) => x.t - y.t)
+  return { events, duration: midi.duration }
+}
+
+function sendRaw(out, ev) {
+  switch (ev.k) {
+    case 'on': out.send('noteon', { note: ev.a, velocity: ev.b, channel: ev.c }); break
+    case 'off': out.send('noteoff', { note: ev.a, velocity: 0, channel: ev.c }); break
+    case 'cc': out.send('cc', { controller: ev.a, value: ev.b, channel: ev.c }); break
+    case 'pitch': out.send('pitch', { value: ev.a, channel: ev.c }); break
+    case 'program': out.send('program', { number: ev.a, channel: ev.c }); break
+  }
+}
+
+class Engine {
+  constructor() {
+    this.out = null
+    this.deviceName = null
+    this.playlist = []
+    this.index = -1
+    this.events = []
+    this.duration = 0
+    this.evIndex = 0
+    this.playing = false
+    this.elapsed = 0
+    this.lastTick = 0
+    this.lastPos = 0
+    this.clients = new Set()
+    this.timer = setInterval(() => this.tick(), 5)
+  }
+
+  setPlaylist(files) {
+    this.playlist = files.map((f) => ({ path: f, name: basename(f), folder: basename(dirname(f)) }))
+  }
+
+  selectDevice(name) {
+    if (this.out) { try { this.allNotesOff(); this.out.close() } catch { /* ignore */ } this.out = null }
+    const outs = easymidi.getOutputs()
+    const found = outs.find((n) => n === name) || outs.find((n) => n.toLowerCase().includes((name || '').toLowerCase()))
+    if (found) { this.out = new easymidi.Output(found); this.deviceName = found }
+    this.broadcastState()
+  }
+
+  load(i) {
+    if (i < 0 || i >= this.playlist.length) return
+    this.allNotesOff()
+    this.index = i
+    try { const r = buildEventList(this.playlist[i].path); this.events = r.events; this.duration = r.duration }
+    catch { this.events = []; this.duration = 0 }
+    this.evIndex = 0
+    this.elapsed = 0
+    this.broadcast({ type: 'reset' })
+    this.broadcastState()
+  }
+
+  play() { if (this.out && this.events.length) { this.playing = true; this.lastTick = performance.now(); this.broadcastState() } }
+  pause() { this.playing = false; this.allNotesOff(); this.broadcast({ type: 'reset' }); this.broadcastState() }
+  stop() { this.playing = false; this.evIndex = 0; this.elapsed = 0; this.allNotesOff(); this.broadcast({ type: 'reset' }); this.broadcastState() }
+  next() { if (this.index + 1 < this.playlist.length) { this.load(this.index + 1); this.play() } else { this.stop() } }
+  prev() { this.load(this.index > 0 ? this.index - 1 : 0); this.play() }
+
+  allNotesOff() {
+    if (!this.out) return
+    for (let c = 0; c < 16; c++) {
+      this.out.send('cc', { controller: 120, value: 0, channel: c })
+      this.out.send('cc', { controller: 123, value: 0, channel: c })
+    }
+  }
+
+  tick() {
+    if (!this.playing) return
+    const now = performance.now()
+    this.elapsed += (now - this.lastTick) / 1000
+    this.lastTick = now
+    while (this.evIndex < this.events.length && this.events[this.evIndex].t <= this.elapsed) {
+      const ev = this.events[this.evIndex++]
+      if (this.out) sendRaw(this.out, ev)
+      if (ev.k === 'on' || ev.k === 'off' || ev.k === 'cc') this.broadcast({ type: 'ev', k: ev.k, c: ev.c, a: ev.a, b: ev.b })
+    }
+    if (now - this.lastPos > 100) { this.lastPos = now; this.broadcast({ type: 'pos', t: this.elapsed, d: this.duration }) }
+    if (this.evIndex >= this.events.length) this.next()
+  }
+
+  state() {
+    return {
+      type: 'state',
+      devices: easymidi.getOutputs(),
+      device: this.deviceName,
+      playlist: this.playlist.map((p, i) => ({ i, name: p.name, folder: p.folder })),
+      index: this.index,
+      playing: this.playing,
+      duration: this.duration,
+      position: this.elapsed,
+    }
+  }
+
+  broadcastState() { this.broadcast(this.state()) }
+  broadcast(obj) {
+    const s = `data: ${JSON.stringify(obj)}\n\n`
+    for (const res of this.clients) { try { res.write(s) } catch { /* ignore */ } }
+  }
+}
+
+function contentType(f) {
+  if (f.endsWith('.html')) return 'text/html; charset=utf-8'
+  if (f.endsWith('.js')) return 'text/javascript; charset=utf-8'
+  if (f.endsWith('.css')) return 'text/css; charset=utf-8'
+  return 'application/octet-stream'
+}
+
+function cmdServe(argv) {
+  const engine = new Engine()
+  const folder = argv.folder || process.cwd()
+  const files = collectFiles([folder], argv.recursive)
+  engine.setPlaylist(files)
+  const outs = easymidi.getOutputs()
+  if (outs.length) engine.selectDevice(outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0])
+  if (files.length) engine.load(0)
+
+  const webDir = join(dirname(fileURLToPath(import.meta.url)), 'web')
+  const server = http.createServer((req, res) => {
+    const u = new URL(req.url, 'http://localhost')
+    if (u.pathname === '/events') {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' })
+      res.write('\n')
+      engine.clients.add(res)
+      res.write(`data: ${JSON.stringify(engine.state())}\n\n`)
+      req.on('close', () => engine.clients.delete(res))
+      return
+    }
+    if (u.pathname === '/api' && req.method === 'POST') {
+      let body = ''
+      req.on('data', (d) => { body += d })
+      req.on('end', () => {
+        let m = {}
+        try { m = JSON.parse(body) } catch { /* ignore */ }
+        const fns = { device: () => engine.selectDevice(m.name), load: () => engine.load(m.index), play: () => engine.play(), pause: () => engine.pause(), next: () => engine.next(), prev: () => engine.prev(), stop: () => engine.stop() }
+        if (fns[m.action]) fns[m.action]()
+        res.writeHead(200); res.end('ok')
+      })
+      return
+    }
+    const file = join(webDir, u.pathname === '/' ? '/index.html' : u.pathname)
+    if (!file.startsWith(webDir)) { res.writeHead(403); res.end(); return }
+    let data
+    try { data = readFileSync(file) } catch { res.writeHead(404); res.end('not found'); return }
+    res.writeHead(200, { 'Content-Type': contentType(file) })
+    res.end(data)
+  })
+  server.listen(argv.http, () => {
+    console.log(`opl web player:  http://localhost:${argv.http}`)
+    console.log(`folder: ${folder}  (${files.length} tracks)   device: ${engine.deviceName || 'none'}`)
+    console.log('Ctrl-C to stop.')
+  })
+  process.on('SIGINT', () => { engine.allNotesOff(); process.exit(0) })
+}
+
+// --------------------------------------------------------------------------
 yargs(hideBin(process.argv))
   .scriptName('opl')
   .usage('$0 <command> [options]')
@@ -335,6 +523,10 @@ yargs(hideBin(process.argv))
     .option('shuffle', { type: 'boolean', default: false })
     .option('loop', { type: 'boolean', default: false })
     .option('ch', { type: 'number', describe: 'force all events onto this channel 1-16' }), cmdPlay)
+  .command('serve [folder]', 'web player + visualizer; pick any MIDI output device', (y) => y
+    .positional('folder', { type: 'string', describe: 'folder of .mid files (default: current dir)' })
+    .option('recursive', { alias: 'r', type: 'boolean', default: false })
+    .option('http', { type: 'number', default: 7373, describe: 'HTTP port for the web UI' }), cmdServe)
   .demandCommand(1, 'Pick a command (try --help).')
   .strict()
   .help()

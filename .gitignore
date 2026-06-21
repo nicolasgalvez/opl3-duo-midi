@@ -10,6 +10,11 @@
 # Node (opl CLI)
 node_modules/
 
+# Playwright artifacts
+test-results/
+playwright-report/
+.playwright/
+
 # VS Code "Local History" extension snapshots
 .history/
 
