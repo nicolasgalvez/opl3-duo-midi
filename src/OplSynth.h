@@ -32,6 +32,10 @@ public:
 
   void panic();          // immediate all-sound / all-notes off
 
+  // Eased left/right output level (0..1), MIDI-derived, for VU LEDs.
+  float levelLeft() const { return _vuL; }
+  float levelRight() const { return _vuR; }
+
 private:
   static constexpr uint8_t NUM_MIDI_CHANNELS    = 16;
   static constexpr uint8_t NUM_MELODIC_CHANNELS = 12;
@@ -74,4 +78,7 @@ private:
   OplChannel  _melodic[NUM_MELODIC_CHANNELS];
   OplChannel  _drums[NUM_DRUM_CHANNELS];
   uint32_t    _eventIndex = 0;
+  float       _vuL = 0.0f;
+  float       _vuR = 0.0f;
+  uint32_t    _lastVuMs = 0;
 };

@@ -47,6 +47,11 @@ void setup() {
   patchEncoder.begin();
   display.begin();
 
+  if (cfg::LED_VU_ENABLED) {
+    pinMode(cfg::LED_L_PIN, OUTPUT);
+    pinMode(cfg::LED_R_PIN, OUTPUT);
+  }
+
   // Sync the knob + screen to the target channel's current (boot) patch.
   patchEncoder.setValue(synth.program(cfg::ENC_TARGET_CHANNEL));
   display.show(patchEncoder.value(), gmInstrumentName(patchEncoder.value()));
@@ -65,6 +70,13 @@ void loop() {
     synth.panic();                      // tap the knob = all notes off
   }
 
-  synth.update();                       // modulation / aftertouch LFO
+  synth.update();                       // modulation / aftertouch LFO + L/R VU levels
   display.update(millis());             // throttled, dirty-flag render (no-op if disabled)
+
+  if (cfg::LED_VU_ENABLED) {            // drive the L/R VU LEDs (squared = nicer fade)
+    const float l = synth.levelLeft();
+    const float r = synth.levelRight();
+    analogWrite(cfg::LED_L_PIN, static_cast<int>(l * l * 255.0f));
+    analogWrite(cfg::LED_R_PIN, static_cast<int>(r * r * 255.0f));
+  }
 }

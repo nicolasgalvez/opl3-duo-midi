@@ -43,4 +43,12 @@ namespace cfg {
   constexpr uint8_t  OLED_HEIGHT    = 64;
   constexpr uint32_t OLED_REDRAW_MS = 33;      // ~30 fps cap so the screen can't starve MIDI
 
+  // ---- L/R VU LEDs -------------------------------------------------------
+  // Brightness tracks the MIDI-derived left/right level (velocity x CC7 x CC11,
+  // split by pan). MUST be PWM pins to dim. On Teensy 4.1 pins 30/31/32 have NO
+  // PWM, so the nearest PWM pins (28/29) are used; change these if you rewire.
+  constexpr bool    LED_VU_ENABLED = true;
+  constexpr uint8_t LED_L_PIN      = 28;       // left  VU LED (PWM)
+  constexpr uint8_t LED_R_PIN      = 29;       // right VU LED (PWM)
+
 }  // namespace cfg

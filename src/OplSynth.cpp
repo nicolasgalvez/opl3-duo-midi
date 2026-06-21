@@ -55,6 +55,30 @@ void OplSynth::update() {
       _opl3.setFNumber(controlChannel, notePitches[baseNote] + fDelta);
     }
   }
+
+  // L/R VU levels for the LEDs, stepped at a fixed ~5ms rate so the envelope
+  // timing is independent of how fast loop() spins.
+  uint32_t now = millis();
+  if (now - _lastVuMs >= 5) {
+    _lastVuMs = now;
+    float tL = 0.0f, tR = 0.0f;
+    for (uint8_t i = 0; i < NUM_MELODIC_CHANNELS; i++) {
+      if (_melodic[i].note == VALUE_UNDEFINED) continue;
+      uint8_t mc = _melodic[i].midiChannel;
+      float lvl = _melodic[i].noteVelocity * _midi[mc].volume * _midi[mc].expression;
+      if (_midi[mc].panLeft)  tL += lvl;
+      if (_midi[mc].panRight) tR += lvl;
+    }
+    for (uint8_t i = 0; i < NUM_DRUM_CHANNELS; i++) {
+      if (_drums[i].note == VALUE_UNDEFINED) continue;
+      tL += _drums[i].noteVelocity;   // drums sit center
+      tR += _drums[i].noteVelocity;
+    }
+    if (tL > 1.0f) tL = 1.0f;
+    if (tR > 1.0f) tR = 1.0f;
+    _vuL += (tL - _vuL) * (tL > _vuL ? 0.5f : 0.08f);   // fast attack, slower decay
+    _vuR += (tR - _vuR) * (tR > _vuR ? 0.5f : 0.08f);
+  }
 }
 
 void OplSynth::playMelodic(uint8_t midiChannel, uint8_t note, uint8_t velocity) {
