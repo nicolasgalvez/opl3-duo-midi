@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OPL ░▒▓ MIDI PLAYER</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="scanlines"></div>
+  <div class="crt">
+    <header class="topbar">
+      <span class="title">▓▒░ OPL · MIDI PLAYER ░▒▓</span>
+      <label class="devsel">OUT&nbsp;»&nbsp;<select id="device"></select></label>
+    </header>
+
+    <main>
+      <section class="panel viz">
+        <div class="panel-title">EQUALIZER · 16 CH</div>
+        <canvas id="eq"></canvas>
+      </section>
+
+      <aside class="panel playlist">
+        <div class="panel-title">PLAYLIST</div>
+        <ol id="list"></ol>
+      </aside>
+    </main>
+
+    <footer class="panel nowplaying">
+      <div class="np-line"><span class="lbl">TRACK </span><span id="np-name" class="amber">—</span></div>
+      <div class="np-line"><span class="lbl">FOLDER</span><span id="np-folder">—</span></div>
+      <div class="time">
+        <span id="t-cur">0:00</span>
+        <div class="seek"><div id="seek-fill"></div></div>
+        <span id="t-dur">0:00</span>
+      </div>
+      <div class="transport">
+        <button data-act="prev">⏮ PREV</button>
+        <button data-act="play" class="go">▶ PLAY</button>
+        <button data-act="pause">⏸ PAUSE</button>
+        <button data-act="stop">■ STOP</button>
+        <button data-act="next">NEXT ⏭</button>
+      </div>
+    </footer>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
