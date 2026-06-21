@@ -1,0 +1,12 @@
+{
+  "name": "opl3-midi-cli",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "bin": { "opl": "./opl.mjs" },
+  "dependencies": {
+    "yargs": "^17.7.2",
+    "easymidi": "^3.1.0",
+    "@tonejs/midi": "^2.0.28"
+  }
+}
