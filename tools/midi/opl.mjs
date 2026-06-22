@@ -18,7 +18,7 @@
  * During `play` in a terminal:  n = next   p = prev   space = pause   q = quit
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { basename, extname, join, dirname } from 'node:path'
+import { basename, extname, join, dirname, isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { EventEmitter } from 'node:events'
 import http from 'node:http'
@@ -28,6 +28,18 @@ import toneMidiPkg from '@tonejs/midi'
 import yargs from 'yargs'
 
 const { Midi } = toneMidiPkg
+
+// Load tools/midi/.env (e.g. MIDI_LIBRARY) if present.
+try { process.loadEnvFile(join(dirname(fileURLToPath(import.meta.url)), '.env')) } catch { /* no .env file */ }
+
+// Resolve a path; for a relative path not found in cwd, fall back to MIDI_LIBRARY.
+function resolveLib(p) {
+  if (isAbsolute(p)) return p
+  try { statSync(p); return p } catch { /* not relative to cwd */ }
+  const base = process.env.MIDI_LIBRARY
+  if (base) { const alt = join(base, p); try { statSync(alt); return alt } catch { /* not in library */ } }
+  return p
+}
 import { hideBin } from 'yargs/helpers'
 
 const DEFAULT_PORT_MATCH = 'OPL3Duo'
@@ -169,9 +181,10 @@ function cmdPanic(argv) {
 function collectFiles(paths, recursive) {
   const isMidi = (p) => MIDI_EXTS.includes(extname(p).toLowerCase())
   const out = []
-  for (const p of paths) {
+  for (const raw of paths) {
+    const p = resolveLib(raw)
     let st
-    try { st = statSync(p) } catch { console.error('skip (not found):', p); continue }
+    try { st = statSync(p) } catch { console.error('skip (not found):', raw); continue }
     if (st.isDirectory()) {
       const walk = (dir) => {
         for (const nm of readdirSync(dir).sort()) {
@@ -443,7 +456,7 @@ function contentType(f) {
 
 function cmdServe(argv) {
   const engine = new Engine()
-  const folder = argv.folder || process.cwd()
+  const folder = resolveLib(argv.folder || process.cwd())
   const files = collectFiles([folder], argv.recursive)
   engine.setPlaylist(files)
   const outs = easymidi.getOutputs()

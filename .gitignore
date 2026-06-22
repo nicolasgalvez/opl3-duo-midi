@@ -10,6 +10,9 @@
 # Node (opl CLI)
 node_modules/
 
+# Local env (machine-specific paths) — keep .env.example tracked
+.env
+
 # Playwright artifacts
 test-results/
 playwright-report/
