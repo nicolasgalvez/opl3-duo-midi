@@ -402,7 +402,7 @@ class Engine {
   play() { if (this.out && this.events.length) { this.playing = true; this.lastTick = performance.now(); this.broadcastState() } }
   pause() { this.playing = false; this.allNotesOff(); this.broadcast({ type: 'reset' }); this.broadcastState() }
   stop() { this.playing = false; this.evIndex = 0; this.elapsed = 0; this.allNotesOff(); this.broadcast({ type: 'reset' }); this.broadcastState() }
-  next() { if (this.index + 1 < this.playlist.length) { this.load(this.index + 1); this.play() } else { this.stop() } }
+  next() { if (this.playlist.length === 0) return; this.load((this.index + 1) % this.playlist.length); this.play() }
   prev() { this.load(this.index > 0 ? this.index - 1 : 0); this.play() }
 
   allNotesOff() {
