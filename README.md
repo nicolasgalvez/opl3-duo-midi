@@ -63,6 +63,29 @@ opl play "/path/to/folder" -r --loop       # play a folder; n/p/space/q to contr
 opl panic                                  # silence stuck notes
 ```
 
+### Web player + visualizer
+
+```bash
+opl serve "<folder>" -r            # serve a folder of .mid files (recursive)
+# then open http://localhost:7373
+opl serve "<folder>" -r --http 8080   # use a different port
+```
+
+An ANSI/CRT-themed page with a 16-channel velocity **equalizer**, playlist, now-playing
+(track + folder), and transport. Pick the MIDI **output device** in the page (top-right) and
+press play. `Ctrl-C` stops the server.
+
+### MIDI library base path (`.env`)
+
+Copy `tools/midi/.env.example` to `tools/midi/.env` and set `MIDI_LIBRARY` to your MIDI
+collection's path. Then **relative** folder names passed to `opl serve` / `opl play` resolve
+against it:
+
+```bash
+# with MIDI_LIBRARY=/path/to/collection
+opl serve "_Bobby Prince" -r       # -> /path/to/collection/_Bobby Prince
+```
+
 ## Project layout
 
 ```
