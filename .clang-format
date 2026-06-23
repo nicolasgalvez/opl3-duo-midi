@@ -1,0 +1,7 @@
+# Firmware C/C++ style. Google base matches the existing 2-space, attach-brace
+# code; a wider column limit avoids re-wrapping the aligned MIDI trampolines.
+BasedOnStyle: Google
+IndentWidth: 2
+ColumnLimit: 100
+AlignConsecutiveDeclarations: false
+AlignConsecutiveAssignments: false

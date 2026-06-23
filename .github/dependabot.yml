@@ -1,0 +1,29 @@
+version: 2
+updates:
+  # Root dev tooling (husky, eslint, prettier, lint-staged)
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+
+  # The opl CLI (easymidi, @tonejs/midi, audify, yargs, playwright)
+  - package-ecosystem: npm
+    directory: /tools/midi
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
