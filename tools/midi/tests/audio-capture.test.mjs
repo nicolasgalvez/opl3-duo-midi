@@ -22,7 +22,11 @@ import { fileURLToPath } from 'node:url'
 import easymidi from 'easymidi'
 
 // Load .env
-try { process.loadEnvFile(join(dirname(fileURLToPath(import.meta.url)), '..', '.env')) } catch { /* no .env */ }
+try {
+  process.loadEnvFile(join(dirname(fileURLToPath(import.meta.url)), '..', '.env'))
+} catch {
+  /* no .env */
+}
 
 // --- parse args ---
 function arg(name, fallback) {
@@ -47,7 +51,9 @@ function detectAudioDevice() {
     }
     // Prefer BlackHole, else first device
     return devices.find((d) => d.toLowerCase().includes('blackhole')) || devices[0] || null
-  } catch { return null }
+  } catch {
+    return null
+  }
 }
 
 // Audio device: --audio arg -> OPL_AUDIO_DEVICE env -> auto-detect
@@ -57,16 +63,21 @@ const AUDIO_DEVICE = arg('audio', null) || process.env.OPL_AUDIO_DEVICE || detec
 const midiOutputs = easymidi.getOutputs()
 const midiArg = arg('midi', null)
 const MIDI_MATCH = midiArg || process.env.OPL_MIDI_DEVICE || midiOutputs[0] || 'OPL3Duo'
-const NOTE_DUR = 2      // seconds the chord sustains
-const TAIL = 1          // seconds of silence after note-off
+const NOTE_DUR = 2 // seconds the chord sustains
+const TAIL = 1 // seconds of silence after note-off
 const REC_DUR = NOTE_DUR + TAIL + 0.5
 
 let passed = 0
 let failed = 0
 
 function check(condition, label) {
-  if (condition) { console.log(`  PASS: ${label}`); passed++ }
-  else { console.error(`  FAIL: ${label}`); failed++ }
+  if (condition) {
+    console.log(`  PASS: ${label}`)
+    passed++
+  } else {
+    console.error(`  FAIL: ${label}`)
+    failed++
+  }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -79,7 +90,10 @@ async function main() {
   console.log(`MIDI outputs: ${midiOutputs.join(', ') || '(none)'}`)
   const midiName = midiOutputs.find((n) => n.toLowerCase().includes(MIDI_MATCH.toLowerCase())) || midiOutputs[0]
   check(!!midiName, `MIDI device resolved to "${midiName}" (match: "${MIDI_MATCH}")`)
-  if (!midiName) { console.error('\nCannot proceed without MIDI device.'); process.exit(1) }
+  if (!midiName) {
+    console.error('\nCannot proceed without MIDI device.')
+    process.exit(1)
+  }
 
   // 2. Resolve audio device
   if (!AUDIO_DEVICE) {
@@ -95,11 +109,24 @@ async function main() {
   // 3. Record silence as a baseline (500ms)
   console.log('\nRecording 0.5s silence baseline...')
   await new Promise((resolve) => {
-    const p = spawn('ffmpeg', [
-      '-f', 'avfoundation', '-i', `:${AUDIO_DEVICE}`,
-      '-t', '0.5', '-ar', '48000', '-ac', '2',
-      '-y', join(tmpDir, 'silence.wav'),
-    ], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const p = spawn(
+      'ffmpeg',
+      [
+        '-f',
+        'avfoundation',
+        '-i',
+        `:${AUDIO_DEVICE}`,
+        '-t',
+        '0.5',
+        '-ar',
+        '48000',
+        '-ac',
+        '2',
+        '-y',
+        join(tmpDir, 'silence.wav'),
+      ],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    )
     p.on('close', resolve)
   })
 
@@ -110,14 +137,30 @@ async function main() {
   console.log(`\nRecording ${REC_DUR}s while playing C-major chord for ${NOTE_DUR}s...`)
   const out = new easymidi.Output(midiName)
 
-  const ff = spawn('ffmpeg', [
-    '-f', 'avfoundation', '-i', `:${AUDIO_DEVICE}`,
-    '-t', String(REC_DUR),
-    '-ar', '48000', '-ac', '2', '-sample_fmt', 's16',
-    '-y', wavFile,
-  ], { stdio: ['ignore', 'pipe', 'pipe'] })
+  const ff = spawn(
+    'ffmpeg',
+    [
+      '-f',
+      'avfoundation',
+      '-i',
+      `:${AUDIO_DEVICE}`,
+      '-t',
+      String(REC_DUR),
+      '-ar',
+      '48000',
+      '-ac',
+      '2',
+      '-sample_fmt',
+      's16',
+      '-y',
+      wavFile,
+    ],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
+  )
   let ffErr = ''
-  ff.stderr.on('data', (d) => { ffErr += d })
+  ff.stderr.on('data', (d) => {
+    ffErr += d
+  })
 
   // Let ffmpeg settle, then play
   await sleep(400)
@@ -136,7 +179,9 @@ async function main() {
   const stats = await analyze(wavFile)
   console.log(`\n  Recording: mean ${stats.mean.toFixed(1)} dB, max ${stats.max.toFixed(1)} dB`)
   console.log(`  Baseline:  mean ${silenceStats.mean.toFixed(1)} dB, max ${silenceStats.max.toFixed(1)} dB`)
-  console.log(`  Delta:     mean ${(stats.mean - silenceStats.mean).toFixed(1)} dB, max ${(stats.max - silenceStats.max).toFixed(1)} dB`)
+  console.log(
+    `  Delta:     mean ${(stats.mean - silenceStats.mean).toFixed(1)} dB, max ${(stats.max - silenceStats.max).toFixed(1)} dB`,
+  )
 
   // 6. Assertions
   console.log('\nResults:')
@@ -145,7 +190,11 @@ async function main() {
   check(stats.mean > -55, `Mean volume (${stats.mean.toFixed(1)} dB) is above -55 dB — not silent`)
 
   // Cleanup
-  try { rmSync(tmpDir, { recursive: true }) } catch { /* ignore */ }
+  try {
+    rmSync(tmpDir, { recursive: true })
+  } catch {
+    /* ignore */
+  }
 
   console.log(`\n${passed} passed, ${failed} failed`)
   process.exit(failed > 0 ? 1 : 0)
@@ -158,7 +207,9 @@ function analyze(wavPath) {
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     let out = ''
-    p.stderr.on('data', (d) => { out += d })
+    p.stderr.on('data', (d) => {
+      out += d
+    })
     p.on('close', () => {
       const mean = parseFloat(out.match(/mean_volume:\s*(-?[\d.]+)\s*dB/)?.[1] ?? '-999')
       const max = parseFloat(out.match(/max_volume:\s*(-?[\d.]+)\s*dB/)?.[1] ?? '-999')
@@ -167,4 +218,7 @@ function analyze(wavPath) {
   })
 }
 
-main().catch((e) => { console.error(e); process.exit(1) })
+main().catch((e) => {
+  console.error(e)
+  process.exit(1)
+})
