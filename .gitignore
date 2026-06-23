@@ -24,3 +24,6 @@ playwright-report/
 # OS junk
 .DS_Store
 Thumbs.db
+
+# Rendered video output
+*.mp4

@@ -4,6 +4,7 @@ const PORT = 7390
 
 export default defineConfig({
   testDir: './tests',
+  testMatch: /.*\.spec\.mjs/,
   timeout: 15000,
   fullyParallel: false,
   reporter: 'list',

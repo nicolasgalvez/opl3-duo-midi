@@ -17,17 +17,22 @@
  *
  * During `play` in a terminal:  n = next   p = prev   space = pause   q = quit
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync } from 'node:fs'
 import { basename, extname, join, dirname, isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { EventEmitter } from 'node:events'
 import http from 'node:http'
+import net from 'node:net'
+import os from 'node:os'
+import { spawn } from 'node:child_process'
 import readline from 'node:readline'
 import easymidi from 'easymidi'
 import toneMidiPkg from '@tonejs/midi'
+import audify from 'audify'
 import yargs from 'yargs'
 
 const { Midi } = toneMidiPkg
+const { RtAudio, RtAudioFormat } = audify
 
 // Load tools/midi/.env (e.g. MIDI_LIBRARY) if present.
 try { process.loadEnvFile(join(dirname(fileURLToPath(import.meta.url)), '.env')) } catch { /* no .env file */ }
@@ -372,6 +377,10 @@ class Engine {
     this.lastTick = 0
     this.lastPos = 0
     this.clients = new Set()
+    this.single = false
+    this.artPath = null
+    this.theme = 'green'
+    this.title = 'OPL · MIDI PLAYER'
     this.timer = setInterval(() => this.tick(), 5)
   }
 
@@ -402,7 +411,7 @@ class Engine {
   play() { if (this.out && this.events.length) { this.playing = true; this.lastTick = performance.now(); this.broadcastState() } }
   pause() { this.playing = false; this.allNotesOff(); this.broadcast({ type: 'reset' }); this.broadcastState() }
   stop() { this.playing = false; this.evIndex = 0; this.elapsed = 0; this.allNotesOff(); this.broadcast({ type: 'reset' }); this.broadcastState() }
-  next() { if (this.playlist.length === 0) return; this.load((this.index + 1) % this.playlist.length); this.play() }
+  next() { if (this.playlist.length === 0) return; if (this.single) { this.stop(); return } this.load((this.index + 1) % this.playlist.length); this.play() }
   prev() { this.load(this.index > 0 ? this.index - 1 : 0); this.play() }
 
   allNotesOff() {
@@ -447,22 +456,22 @@ class Engine {
   }
 }
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+}
+
 function contentType(f) {
   if (f.endsWith('.html')) return 'text/html; charset=utf-8'
   if (f.endsWith('.js')) return 'text/javascript; charset=utf-8'
   if (f.endsWith('.css')) return 'text/css; charset=utf-8'
+  if (f.endsWith('.png')) return 'image/png'
+  if (f.endsWith('.jpg') || f.endsWith('.jpeg')) return 'image/jpeg'
+  if (f.endsWith('.gif')) return 'image/gif'
+  if (f.endsWith('.webp')) return 'image/webp'
   return 'application/octet-stream'
 }
 
-function cmdServe(argv) {
-  const engine = new Engine()
-  const folder = resolveLib(argv.folder || process.cwd())
-  const files = collectFiles([folder], argv.recursive)
-  engine.setPlaylist(files)
-  const outs = easymidi.getOutputs()
-  if (outs.length) engine.selectDevice(outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0])
-  if (files.length) engine.load(0)
-
+function createServer(engine, port) {
   const webDir = join(dirname(fileURLToPath(import.meta.url)), 'web')
   const server = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://localhost')
@@ -486,19 +495,342 @@ function cmdServe(argv) {
       })
       return
     }
+    if (u.pathname === '/art' && engine.artPath) {
+      try { const data = readFileSync(engine.artPath); res.writeHead(200, { 'Content-Type': contentType(engine.artPath) }); res.end(data) }
+      catch { res.writeHead(404); res.end() }
+      return
+    }
     const file = join(webDir, u.pathname === '/' ? '/index.html' : u.pathname)
     if (!file.startsWith(webDir)) { res.writeHead(403); res.end(); return }
     let data
     try { data = readFileSync(file) } catch { res.writeHead(404); res.end('not found'); return }
+    if (file.endsWith('.html')) {
+      // Inject the selected theme (data-theme drives CSS with no flash) and the
+      // configurable app title (replaces the {{TITLE}} placeholder in the pages).
+      data = Buffer.from(String(data)
+        .replace('<html lang="en">', `<html lang="en" data-theme="${engine.theme || 'green'}">`)
+        .replaceAll('{{TITLE}}', escapeHtml(engine.title || 'OPL · MIDI PLAYER')))
+    }
     res.writeHead(200, { 'Content-Type': contentType(file) })
     res.end(data)
   })
-  server.listen(argv.http, () => {
-    console.log(`opl web player:  http://localhost:${argv.http}`)
-    console.log(`folder: ${folder}  (${files.length} tracks)   device: ${engine.deviceName || 'none'}`)
-    console.log('Ctrl-C to stop.')
-  })
+  server.listen(port)
+  return server
+}
+
+function cmdServe(argv) {
+  const engine = new Engine()
+  engine.theme = argv.theme || process.env.OPL_THEME || 'green'
+  engine.title = argv.title || process.env.OPL_TITLE || engine.title
+  const folder = resolveLib(argv.folder || process.cwd())
+  const files = collectFiles([folder], argv.recursive)
+  engine.setPlaylist(files)
+  const outs = easymidi.getOutputs()
+  if (outs.length) engine.selectDevice(outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0])
+  if (files.length) engine.load(0)
+
+  createServer(engine, argv.http)
+  console.log(`opl web player:  http://localhost:${argv.http}`)
+  console.log(`folder: ${folder}  (${files.length} tracks)   device: ${engine.deviceName || 'none'}`)
+  console.log('Ctrl-C to stop.')
+
   process.on('SIGINT', () => { engine.allNotesOff(); process.exit(0) })
+}
+
+// --------------------------------------------------------------------------
+//  opl render — headless video renderer
+//  Plays a MIDI file, records audio from a system input device, captures the
+//  web visualizer via headless Playwright, and muxes into an MP4 video.
+// --------------------------------------------------------------------------
+
+const RATIOS = {
+  '16:9': { w: 1280, h: 720 },
+  '9:16': { w: 720, h: 1280 },
+  '1:1':  { w: 1080, h: 1080 },
+  '4:5':  { w: 1080, h: 1350 },
+}
+
+function getFreePort() {
+  return new Promise((resolve) => {
+    const srv = net.createServer()
+    srv.listen(0, () => { const port = srv.address().port; srv.close(() => resolve(port)) })
+  })
+}
+
+// Audio capture uses audify (RtAudio -> CoreAudio). ffmpeg's avfoundation
+// indev drops ~6-10% of samples on this hardware; RtAudio captures cleanly.
+function findInputDevice(name) {
+  const rt = new RtAudio()
+  const devs = rt.getDevices().filter((d) => d.inputChannels > 0)
+  const lc = (name || '').toLowerCase()
+  return devs.find((d) => d.name === name) || devs.find((d) => d.name.toLowerCase().includes(lc)) || null
+}
+
+function writeWav(path, pcm, sampleRate, channels) {
+  const bps = 16, blockAlign = channels * bps / 8
+  const h = Buffer.alloc(44)
+  h.write('RIFF', 0); h.writeUInt32LE(36 + pcm.length, 4); h.write('WAVE', 8)
+  h.write('fmt ', 12); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20)
+  h.writeUInt16LE(channels, 22); h.writeUInt32LE(sampleRate, 24)
+  h.writeUInt32LE(sampleRate * blockAlign, 28); h.writeUInt16LE(blockAlign, 32)
+  h.writeUInt16LE(bps, 34); h.write('data', 36); h.writeUInt32LE(pcm.length, 40)
+  writeFileSync(path, Buffer.concat([h, pcm]))
+}
+
+// Open an RtAudio input stream and start collecting PCM. `channels` is an
+// optional "5,6"-style pair of 1-based inputs to capture as stereo; otherwise
+// the first two channels are used. Returns { deviceName, stop() } where stop()
+// writes the WAV and returns the captured frame count.
+function startAudioCapture({ device, channels, rate, outFile }) {
+  const dev = findInputDevice(device)
+  if (!dev) throw new Error(`Audio input device not found: ${device}`)
+  let firstChannel = 0
+  if (channels) firstChannel = Math.min(...channels.split(',').map((n) => parseInt(n, 10) - 1))
+  const nChannels = Math.min(2, dev.inputChannels - firstChannel)
+  const rt = new RtAudio()
+  const chunks = []
+  rt.openStream(
+    null,
+    { deviceId: dev.id, nChannels, firstChannel },
+    RtAudioFormat.RTAUDIO_SINT16,
+    rate, 1920, 'opl-render',
+    (buf) => chunks.push(Buffer.from(buf)),
+    null,
+  )
+  rt.start()
+  return {
+    deviceName: dev.name,
+    stop() {
+      try { rt.stop() } catch { /* ignore */ }
+      try { rt.closeStream() } catch { /* ignore */ }
+      const pcm = Buffer.concat(chunks)
+      writeWav(outFile, pcm, rate, nChannels)
+      return pcm.length / 2 / nChannels
+    },
+  }
+}
+
+async function listAudioDevices() {
+  const rt = new RtAudio()
+  console.log('Audio input devices:\n')
+  for (const d of rt.getDevices()) {
+    if (d.inputChannels > 0) console.log(`  [${d.inputChannels}ch]  ${d.name}`)
+  }
+  console.log('\nPass the device name to --audio-device, and --audio-channels "5,6" to pick a stereo pair.')
+}
+
+// Resolve shared render options once (used across all render modes)
+async function resolveRenderOpts(argv) {
+  let dims
+  if (argv.resolution) {
+    const parts = argv.resolution.split('x').map(Number)
+    if (parts.length !== 2 || !parts[0] || !parts[1]) {
+      console.error('Invalid --resolution. Use WxH, e.g. 1280x720.')
+      process.exit(1)
+    }
+    dims = { w: parts[0], h: parts[1] }
+  } else {
+    dims = RATIOS[argv.ratio] || RATIOS['16:9']
+  }
+
+  const audioDevice = argv.audioDevice || process.env.OPL_AUDIO_DEVICE
+  if (!audioDevice) {
+    console.error('No audio device specified. Use --audio-device, set OPL_AUDIO_DEVICE in .env, or try --list-audio.')
+    process.exit(1)
+  }
+  const audioChannels = argv.audioChannels || process.env.OPL_AUDIO_CHANNELS || null
+  const audioRate = Number(argv.audioRate || process.env.OPL_AUDIO_RATE || 48000)
+
+  const outs = easymidi.getOutputs()
+  if (outs.length === 0) { console.error('No MIDI output ports found.'); process.exit(1) }
+  const midiMatch = argv.device || process.env.OPL_MIDI_DEVICE
+  const devName = midiMatch
+    ? (outs.find((n) => n === midiMatch) || outs.find((n) => n.toLowerCase().includes(midiMatch.toLowerCase())))
+    : (outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0])
+
+  let chromium
+  try {
+    const pw = await import('playwright')
+    chromium = pw.chromium
+  } catch {
+    console.error('Playwright is required for `opl render`. Install it:')
+    console.error('  cd tools/midi && npm install playwright && npx playwright install chromium')
+    process.exit(1)
+  }
+
+  return { dims, audioDevice, audioChannels, audioRate, devName, chromium }
+}
+
+// One full render pipeline: engine + server + headless browser + ffmpeg audio + mux.
+async function renderSession({ playlist, singleMode, totalDuration, outPath, label, argv, opts }) {
+  const { dims, audioDevice, audioChannels, audioRate, devName, chromium } = opts
+
+  const engine = new Engine()
+  engine.single = singleMode
+  engine.theme = argv.theme || process.env.OPL_THEME || 'green'
+  engine.title = argv.title || process.env.OPL_TITLE || engine.title
+  engine.setPlaylist(playlist)
+  if (argv.art) {
+    if (argv.art.startsWith('http')) {
+      console.error('URL-based art is not yet supported. Use a local file path for --art.')
+      process.exit(1)
+    }
+    try { statSync(argv.art); engine.artPath = argv.art }
+    catch { console.error(`Art file not found: ${argv.art}`); process.exit(1) }
+  }
+  if (devName) engine.selectDevice(devName)
+  engine.load(0)
+
+  const port = await getFreePort()
+  const server = createServer(engine, port)
+  const tmpDir = mkdtempSync(join(os.tmpdir(), 'opl-render-'))
+  const audioFile = join(tmpDir, 'audio.wav')
+
+  let cleaned = false
+  const cleanup = () => {
+    if (cleaned) return; cleaned = true
+    try { clearInterval(engine.timer) } catch { /* ignore */ }
+    try { engine.allNotesOff() } catch { /* ignore */ }
+    // Closing the MIDI port releases the CoreMIDI handle that keeps the
+    // libuv event loop alive — without this the process hangs after "Done:".
+    try { if (engine.out) { engine.out.close(); engine.out = null } } catch { /* ignore */ }
+    try { server.close() } catch { /* ignore */ }
+  }
+
+  console.log(`\nRendering: ${label}  (${totalDuration.toFixed(1)}s)`)
+  console.log(`Resolution: ${dims.w}x${dims.h}  Audio: ${audioDevice}${audioChannels ? ` ch${audioChannels}` : ''} @ ${audioRate}Hz  MIDI: ${devName}`)
+
+  const browser = await chromium.launch({ headless: true })
+  const context = await browser.newContext({
+    viewport: { width: dims.w, height: dims.h },
+    recordVideo: { dir: tmpDir, size: { width: dims.w, height: dims.h } },
+  })
+  const page = await context.newPage()
+
+  await page.goto(`http://localhost:${port}/render.html`, { waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(() => {
+    const el = document.getElementById('track-name')
+    return el && el.textContent && el.textContent.trim().length > 0 && el.textContent.trim() !== '\u2014'
+  }, { timeout: 5000 }).catch(() => {})
+
+  // Start audio recording via audify (RtAudio -> CoreAudio).
+  const recDur = totalDuration + 0.5
+  let cap
+  try {
+    cap = startAudioCapture({ device: audioDevice, channels: audioChannels, rate: audioRate, outFile: audioFile })
+  } catch (e) {
+    console.error(e.message); cleanup(); process.exit(1)
+  }
+
+  await sleep(300)
+  engine.play()
+
+  await sleep(recDur * 1000)
+  engine.stop()
+  const frames = cap.stop()
+  console.log(`Capture complete (${(frames / audioRate).toFixed(1)}s audio). Finalizing...`)
+
+  await context.close()
+  await browser.close()
+
+  const webmFiles = readdirSync(tmpDir).filter((f) => f.endsWith('.webm'))
+  if (webmFiles.length === 0) { console.error('No video file created.'); cleanup(); process.exit(1) }
+  const videoFile = join(tmpDir, webmFiles[0])
+
+  try { statSync(audioFile) } catch {
+    console.error('Audio recording failed: no audio file written.')
+    cleanup(); process.exit(1)
+  }
+
+  console.log('Encoding final video...')
+  const muxArgs = [
+    '-i', videoFile, '-i', audioFile,
+    '-c:v', 'libx264', '-preset', 'medium', '-crf', '18',
+    '-pix_fmt', 'yuv420p',
+    // -r AFTER the inputs is an output option: ffmpeg keeps the webm's real
+    // (variable-rate) timestamps and resamples to constant fps, preserving
+    // duration. Before -i it would force-reinterpret the VFR webm as Nfps and
+    // compress the timeline (~20% fast). -shortest trims to the audio length.
+    '-r', String(argv.fps),
+    '-c:a', 'aac', '-b:a', '192k',
+    '-movflags', '+faststart',
+    '-shortest',
+    '-y', outPath,
+  ]
+  await new Promise((resolve) => {
+    spawn('ffmpeg', muxArgs, { stdio: ['ignore', 'inherit', 'inherit'] }).on('close', resolve)
+  })
+
+  cleanup()
+  if (!argv.keepTemps) { try { rmSync(tmpDir, { recursive: true }) } catch { /* ignore */ } }
+  else { console.log(`Temp files: ${tmpDir}`) }
+
+  console.log(`Done: ${outPath}`)
+  return outPath
+}
+
+async function cmdRender(argv) {
+  if (argv.listAudio) { await listAudioDevices(); return }
+
+  // Resolve paths (file(s) or folder(s))
+  const paths = argv.paths || []
+  if (paths.length === 0) {
+    console.error('No files specified. Usage: opl render <file.mid | folder> [options]')
+    process.exit(1)
+  }
+  const files = collectFiles(paths.map(resolveLib), argv.recursive)
+  if (files.length === 0) { console.error('No MIDI files found.'); process.exit(1) }
+
+  const opts = await resolveRenderOpts(argv)
+  const tag = argv.resolution ? `${opts.dims.w}x${opts.dims.h}` : argv.ratio.replace(':', 'x')
+
+  // --- Album mode: all tracks as one continuous video ---
+  if (argv.album && files.length > 1) {
+    let totalDuration = argv.tail
+    for (const f of files) {
+      const midi = new Midi(readFileSync(f))
+      totalDuration += midi.duration
+    }
+    console.log(`Album: ${files.length} tracks, ${totalDuration.toFixed(1)}s total`)
+    const outPath = argv.output || join(process.cwd(), `album.${tag}.mp4`)
+    await renderSession({
+      playlist: files, singleMode: false, totalDuration, outPath,
+      label: `${files.length} tracks (album)`, argv, opts,
+    })
+    process.exit(0)
+  }
+
+  // --- Single file ---
+  if (files.length === 1) {
+    const midi = new Midi(readFileSync(files[0]))
+    const totalDuration = midi.duration + argv.tail
+    const outPath = argv.output || join(process.cwd(), `${basename(files[0], extname(files[0]))}.${tag}.mp4`)
+    await renderSession({
+      playlist: [files[0]], singleMode: true, totalDuration, outPath,
+      label: basename(files[0]), argv, opts,
+    })
+    process.exit(0)
+  }
+
+  // --- Batch mode: one video per file ---
+  console.log(`Batch: ${files.length} files`)
+  for (let i = 0; i < files.length; i++) {
+    console.log(`\n[${i + 1}/${files.length}]`)
+    try {
+      const midi = new Midi(readFileSync(files[i]))
+      const totalDuration = midi.duration + argv.tail
+      const outPath = join(process.cwd(), `${basename(files[i], extname(files[i]))}.${tag}.mp4`)
+      await renderSession({
+        playlist: [files[i]], singleMode: true, totalDuration, outPath,
+        label: basename(files[i]), argv, opts,
+      })
+    } catch (e) {
+      console.error(`  Error: ${e.message}`)
+    }
+  }
+  // audify's RtAudio holds a CoreAudio handle with no release API that keeps
+  // the event loop alive; exit explicitly now that all renders are done.
+  process.exit(0)
 }
 
 // --------------------------------------------------------------------------
@@ -539,7 +871,29 @@ yargs(hideBin(process.argv))
   .command('serve [folder]', 'web player + visualizer; pick any MIDI output device', (y) => y
     .positional('folder', { type: 'string', describe: 'folder of .mid files (default: current dir)' })
     .option('recursive', { alias: 'r', type: 'boolean', default: false })
-    .option('http', { type: 'number', default: 7373, describe: 'HTTP port for the web UI' }), cmdServe)
+    .option('http', { type: 'number', default: 7373, describe: 'HTTP port for the web UI' })
+    .option('theme', { type: 'string', describe: 'web theme: green (default) or winamp' })
+    .option('title', { type: 'string', describe: 'app title shown in the UI (default "OPL · MIDI PLAYER")' }), cmdServe)
+  .command('render [paths..]', 'render MIDI file(s) or folder to video (headless)', (y) => y
+    .positional('paths', { type: 'string', describe: '.mid file(s) or folder(s)' })
+    .option('recursive', { alias: 'r', type: 'boolean', default: false, describe: 'recurse into subfolders' })
+    .option('album', { type: 'boolean', default: false, describe: 'render all tracks as one continuous video' })
+    .option('audio-device', { type: 'string', describe: 'audio input device name (use --list-audio to see)' })
+    .option('audio-channels', { type: 'string', describe: 'capture only these two 1-based input channels as stereo, e.g. "7,8"' })
+    .option('audio-rate', { type: 'number', describe: 'audio sample rate (default 48000; match your interface, e.g. 44100)' })
+    .option('output', { alias: 'o', type: 'string', describe: 'output video file (.mp4)' })
+    .option('ratio', { type: 'string', default: '16:9', choices: ['16:9', '9:16', '1:1', '4:5'], describe: 'aspect ratio preset' })
+    .option('resolution', { type: 'string', describe: 'custom resolution WxH (overrides --ratio)' })
+    .option('art', { type: 'string', describe: 'path to album art image' })
+    .option('tail', { type: 'number', default: 3, describe: 'seconds of tail after last note (default: 3)' })
+    .option('device', { type: 'string', describe: 'MIDI output device name substring' })
+    .option('port', { type: 'number', describe: 'HTTP port for internal server (default: random)' })
+    .option('fps', { type: 'number', default: 30, describe: 'output video framerate' })
+    .option('keep-temps', { type: 'boolean', default: false, describe: 'keep temp files (video.webm, audio.wav)' })
+    .option('list-audio', { type: 'boolean', default: false, describe: 'list audio input devices and exit' })
+    .option('theme', { type: 'string', describe: 'visualizer theme: green (default) or winamp' })
+    .option('title', { type: 'string', describe: 'app title shown in the visualizer (default "OPL · MIDI PLAYER")' })
+  , cmdRender)
   .demandCommand(1, 'Pick a command (try --help).')
   .strict()
   .help()
