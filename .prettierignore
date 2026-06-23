@@ -1,0 +1,5 @@
+node_modules
+.pio
+tools/midi/test-results
+tools/midi/playwright-report
+**/package-lock.json

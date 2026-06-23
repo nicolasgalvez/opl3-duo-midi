@@ -22,17 +22,17 @@ board's stereo line-out.
 
 The board has no microcontroller of its own — the Teensy clocks it over SPI:
 
-| Teensy 4.1 | OPL3 Duo! | |
-|---|---|---|
-| 3.3V | +3.3V | |
-| GND  | GND  | |
-| D6   | A2   | unit select |
-| D7   | A1   | bank select |
-| D8   | A0   | address |
-| D9   | /IC  | reset |
-| D10  | /WR  | latch |
-| D11 (MOSI) | MOSI | hardware SPI |
-| D13 (SCK)  | SCK  | hardware SPI |
+| Teensy 4.1 | OPL3 Duo! |              |
+| ---------- | --------- | ------------ |
+| 3.3V       | +3.3V     |              |
+| GND        | GND       |              |
+| D6         | A2        | unit select  |
+| D7         | A1        | bank select  |
+| D8         | A0        | address      |
+| D9         | /IC       | reset        |
+| D10        | /WR       | latch        |
+| D11 (MOSI) | MOSI      | hardware SPI |
+| D13 (SCK)  | SCK       | hardware SPI |
 
 These match the library's default OPL3Duo pins; change them in `src/Config.h` if you wire it
 differently.
@@ -98,6 +98,20 @@ src/
   main.cpp            composition root + usbMIDI handlers
 tools/midi/           the `opl` CLI (Node + yargs + easymidi + @tonejs/midi)
 ```
+
+## Formatting & linting
+
+A pre-commit hook formats only the files you've staged — **clang-format** for
+C/C++ firmware and **ESLint + Prettier** for the `tools/midi` CLI. Install it
+once with `npm install` at the repo root (also `brew install clang-format`).
+
+```bash
+npm install            # installs husky hooks + JS formatters (repo root)
+npm run format         # one-off: format the whole repo (C/C++ and JS)
+```
+
+The hook runs automatically on `git commit`; bypass with `--no-verify` if ever
+needed.
 
 ## Credits
 

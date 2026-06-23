@@ -2,44 +2,35 @@
 
 // These headers DEFINE the GM bank arrays (not just declare), so they may be
 // included in exactly ONE translation unit. Keep them here, never in main.cpp.
-#include <midi_instruments_4op.h>   // midiInstruments[]
-#include <midi_drums.h>             // midiDrums[]
+#include <midi_drums.h>            // midiDrums[]
+#include <midi_instruments_4op.h>  // midiInstruments[]
 
 namespace {
-  constexpr float   PI2 = 6.28318f;
+constexpr float PI2 = 6.28318f;
 
-  constexpr uint8_t CONTROL_BANK_MSB      = 0;
-  constexpr uint8_t CONTROL_MODULATION    = 1;
-  constexpr uint8_t CONTROL_VOLUME        = 7;
-  constexpr uint8_t CONTROL_PAN           = 10;
-  constexpr uint8_t CONTROL_EXPRESSION    = 11;
-  constexpr uint8_t CONTROL_BANK_LSB      = 32;
-  constexpr uint8_t CONTROL_SUSTAIN       = 64;
-  constexpr uint8_t CONTROL_ALL_SOUND_OFF = 120;
-  constexpr uint8_t CONTROL_RESET_ALL     = 121;
-  constexpr uint8_t CONTROL_ALL_NOTES_OFF = 123;
+constexpr uint8_t CONTROL_BANK_MSB = 0;
+constexpr uint8_t CONTROL_MODULATION = 1;
+constexpr uint8_t CONTROL_VOLUME = 7;
+constexpr uint8_t CONTROL_PAN = 10;
+constexpr uint8_t CONTROL_EXPRESSION = 11;
+constexpr uint8_t CONTROL_BANK_LSB = 32;
+constexpr uint8_t CONTROL_SUSTAIN = 64;
+constexpr uint8_t CONTROL_ALL_SOUND_OFF = 120;
+constexpr uint8_t CONTROL_RESET_ALL = 121;
+constexpr uint8_t CONTROL_ALL_NOTES_OFF = 123;
 
-  // Note F-numbers per octave, +/- 2 semitones of headroom for pitch bend.
-  const unsigned int notePitches[16] = {
-    0x132, 0x144,
-    0x156, 0x16B, 0x181, 0x198, 0x1B0, 0x1CA,
-    0x1E5, 0x202, 0x220, 0x241, 0x263, 0x287,
-    0x2AC, 0x2D6
-  };
+// Note F-numbers per octave, +/- 2 semitones of headroom for pitch bend.
+const unsigned int notePitches[16] = {0x132, 0x144, 0x156, 0x16B, 0x181, 0x198, 0x1B0, 0x1CA,
+                                      0x1E5, 0x202, 0x220, 0x241, 0x263, 0x287, 0x2AC, 0x2D6};
 
-  // OPL channels reserved for drums (2-op slots not used by the 4-op voices).
-  const uint8_t drumChannelsOPL[12] = {
-     6,  7,  8, 15, 16, 17,
-    24, 25, 26, 33, 34, 35
-  };
+// OPL channels reserved for drums (2-op slots not used by the 4-op voices).
+const uint8_t drumChannelsOPL[12] = {6, 7, 8, 15, 16, 17, 24, 25, 26, 33, 34, 35};
 }  // namespace
 
 OplSynth::OplSynth()
     : _opl3(cfg::OPL3_A2, cfg::OPL3_A1, cfg::OPL3_A0, cfg::OPL3_LATCH, cfg::OPL3_RESET) {}
 
-void OplSynth::begin() {
-  systemReset();
-}
+void OplSynth::begin() { systemReset(); }
 
 // Modulation / aftertouch LFO. Cheap when no channel is modulating.
 void OplSynth::update() {
@@ -66,17 +57,17 @@ void OplSynth::update() {
       if (_melodic[i].note == VALUE_UNDEFINED) continue;
       uint8_t mc = _melodic[i].midiChannel;
       float lvl = _melodic[i].noteVelocity * _midi[mc].volume * _midi[mc].expression;
-      if (_midi[mc].panLeft)  tL += lvl;
+      if (_midi[mc].panLeft) tL += lvl;
       if (_midi[mc].panRight) tR += lvl;
     }
     for (uint8_t i = 0; i < NUM_DRUM_CHANNELS; i++) {
       if (_drums[i].note == VALUE_UNDEFINED) continue;
-      tL += _drums[i].noteVelocity;   // drums sit center
+      tL += _drums[i].noteVelocity;  // drums sit center
       tR += _drums[i].noteVelocity;
     }
     if (tL > 1.0f) tL = 1.0f;
     if (tR > 1.0f) tR = 1.0f;
-    _vuL += (tL - _vuL) * (tL > _vuL ? 0.5f : 0.08f);   // fast attack, slower decay
+    _vuL += (tL - _vuL) * (tL > _vuL ? 0.5f : 0.08f);  // fast attack, slower decay
     _vuR += (tR - _vuR) * (tR > _vuR ? 0.5f : 0.08f);
   }
 }
@@ -172,7 +163,8 @@ void OplSynth::playDrum(uint8_t note, uint8_t velocity) {
   unsigned long oldest = -1;
 
   for (uint8_t i = 0; i < NUM_DRUM_CHANNELS; i++) {
-    if (_drums[i].program == program && _drums[i].note == VALUE_UNDEFINED && _drums[i].eventIndex < oldest) {
+    if (_drums[i].program == program && _drums[i].note == VALUE_UNDEFINED &&
+        _drums[i].eventIndex < oldest) {
       oldest = _drums[i].eventIndex;
       oplChannelIndex = i;
     }
@@ -224,8 +216,7 @@ void OplSynth::playDrum(uint8_t note, uint8_t velocity) {
                           log(min((float)velocity, 127.0)) / log(127.0));
     }
 
-    _opl3.playNote(drumChannelsOPL[oplChannelIndex],
-                   _drums[oplChannelIndex].transpose / 12,
+    _opl3.playNote(drumChannelsOPL[oplChannelIndex], _drums[oplChannelIndex].transpose / 12,
                    _drums[oplChannelIndex].transpose % 12);
   }
 }
@@ -235,12 +226,13 @@ void OplSynth::setOplChannelVolume(uint8_t channel4OP, uint8_t midiChannel) {
 
   Instrument4OP instrument = _midi[midiChannel].instrument;
   // Effective level = note velocity * channel volume (CC7) * expression (CC11).
-  float volume = _melodic[channel4OP].noteVelocity
-               * _midi[midiChannel].volume
-               * _midi[midiChannel].expression;
+  float volume =
+      _melodic[channel4OP].noteVelocity * _midi[midiChannel].volume * _midi[midiChannel].expression;
   for (uint8_t i = 0; i < 2; i++) {
-    float op1Level = (float)(63 - instrument.subInstrument[i].operators[OPERATOR1].outputLevel) / 63.0;
-    float op2Level = (float)(63 - instrument.subInstrument[i].operators[OPERATOR2].outputLevel) / 63.0;
+    float op1Level =
+        (float)(63 - instrument.subInstrument[i].operators[OPERATOR1].outputLevel) / 63.0;
+    float op2Level =
+        (float)(63 - instrument.subInstrument[i].operators[OPERATOR2].outputLevel) / 63.0;
     uint8_t volumeOp1 = round(op1Level * volume * 63.0);
     uint8_t volumeOp2 = round(op2Level * volume * 63.0);
     _opl3.setVolume(_opl3.get4OPControlChannel(channel4OP, i), OPERATOR1, 63 - volumeOp1);
@@ -272,7 +264,7 @@ void OplSynth::noteOff(uint8_t midiChannel, uint8_t note, uint8_t velocity) {
     for (uint8_t i = 0; i < NUM_MELODIC_CHANNELS; i++) {
       if (_melodic[i].midiChannel == midiChannel && _melodic[i].note == note) {
         if (_midi[midiChannel].sustain) {
-          _melodic[i].sustained = true;          // pedal down: keep ringing
+          _melodic[i].sustained = true;  // pedal down: keep ringing
         } else {
           _opl3.setKeyOn(_opl3.get4OPControlChannel(i), false);
           _melodic[i].note = VALUE_UNDEFINED;
@@ -335,7 +327,7 @@ void OplSynth::controlChange(uint8_t midiChannel, uint8_t control, uint8_t value
 
     // CC10 Pan: OPL3 only has L/R enable bits -> hard-left / center / hard-right.
     case CONTROL_PAN:
-      _midi[midiChannel].panLeft  = (value <= 84);
+      _midi[midiChannel].panLeft = (value <= 84);
       _midi[midiChannel].panRight = (value >= 43);
       for (uint8_t i = 0; i < NUM_MELODIC_CHANNELS; i++) {
         if (_melodic[i].midiChannel == midiChannel && _melodic[i].note != VALUE_UNDEFINED) {
@@ -420,7 +412,7 @@ void OplSynth::pitchChange(uint8_t midiChannel, int pitch) {
 }
 
 void OplSynth::afterTouch(uint8_t midiChannel, uint8_t pressure) {
-  midiChannel = midiChannel % NUM_MIDI_CHANNELS;   // guard against channel 16 -> OOB
+  midiChannel = midiChannel % NUM_MIDI_CHANNELS;  // guard against channel 16 -> OOB
   if (_midi[midiChannel].afterTouch == 0.0) {
     _midi[midiChannel].tAfterTouch = millis();
   }
@@ -434,7 +426,7 @@ void OplSynth::systemReset() {
   _opl3.setOPL3Enabled(true);
   _opl3.setAll4OPChannelsEnabled(true);
 
-  float defaultVolume = log(127.0 * 0.8) / log(127.0);   // ~80%
+  float defaultVolume = log(127.0 * 0.8) / log(127.0);  // ~80%
 
   for (uint8_t i = 0; i < NUM_MIDI_CHANNELS; i++) {
     programChange(i, 0);
@@ -468,9 +460,7 @@ void OplSynth::systemReset() {
   _eventIndex = 0;
 }
 
-void OplSynth::setProgram(uint8_t channel, uint8_t program) {
-  programChange(channel, program);
-}
+void OplSynth::setProgram(uint8_t channel, uint8_t program) { programChange(channel, program); }
 
 uint8_t OplSynth::program(uint8_t channel) const {
   return _midi[channel % NUM_MIDI_CHANNELS].program;

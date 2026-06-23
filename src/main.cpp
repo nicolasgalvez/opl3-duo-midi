@@ -16,23 +16,23 @@
 #include "Config.h"
 #include "GMNames.h"
 #include "OplSynth.h"
-#include "PatchEncoder.h"
 #include "PatchDisplay.h"
+#include "PatchEncoder.h"
 
 // ---- Components -----------------------------------------------------------
-OplSynth     synth;
-PatchEncoder patchEncoder(cfg::ENC_PIN_A, cfg::ENC_PIN_B, cfg::ENC_BTN_PIN,
-                          cfg::GM_PROGRAM_MIN, cfg::GM_PROGRAM_MAX);
+OplSynth synth;
+PatchEncoder patchEncoder(cfg::ENC_PIN_A, cfg::ENC_PIN_B, cfg::ENC_BTN_PIN, cfg::GM_PROGRAM_MIN,
+                          cfg::GM_PROGRAM_MAX);
 PatchDisplay display;
 
 // ---- usbMIDI trampolines (usbMIDI wants plain function pointers) ----------
-static void onNoteOn(byte ch, byte note, byte vel)        { synth.noteOn(ch, note, vel); }
-static void onNoteOff(byte ch, byte note, byte vel)       { synth.noteOff(ch, note, vel); }
-static void onProgramChange(byte ch, byte program)        { synth.programChange(ch, program); }
+static void onNoteOn(byte ch, byte note, byte vel) { synth.noteOn(ch, note, vel); }
+static void onNoteOff(byte ch, byte note, byte vel) { synth.noteOff(ch, note, vel); }
+static void onProgramChange(byte ch, byte program) { synth.programChange(ch, program); }
 static void onControlChange(byte ch, byte ctrl, byte val) { synth.controlChange(ch, ctrl, val); }
-static void onPitchChange(byte ch, int pitch)             { synth.pitchChange(ch, pitch); }
-static void onAfterTouch(byte ch, byte pressure)          { synth.afterTouch(ch, pressure); }
-static void onSystemReset()                               { synth.systemReset(); }
+static void onPitchChange(byte ch, int pitch) { synth.pitchChange(ch, pitch); }
+static void onAfterTouch(byte ch, byte pressure) { synth.afterTouch(ch, pressure); }
+static void onSystemReset() { synth.systemReset(); }
 
 void setup() {
   usbMIDI.setHandleNoteOn(onNoteOn);
@@ -58,22 +58,22 @@ void setup() {
 }
 
 void loop() {
-  usbMIDI.read();                       // hot path: every iteration, never blocked
+  usbMIDI.read();  // hot path: every iteration, never blocked
 
-  if (patchEncoder.update()) {          // non-blocking poll
+  if (patchEncoder.update()) {  // non-blocking poll
     uint8_t program = static_cast<uint8_t>(patchEncoder.value());
     synth.setProgram(cfg::ENC_TARGET_CHANNEL, program);
-    display.show(program, gmInstrumentName(program));   // just flags dirty
+    display.show(program, gmInstrumentName(program));  // just flags dirty
   }
 
   if (patchEncoder.buttonPressed()) {
-    synth.panic();                      // tap the knob = all notes off
+    synth.panic();  // tap the knob = all notes off
   }
 
-  synth.update();                       // modulation / aftertouch LFO + L/R VU levels
-  display.update(millis());             // throttled, dirty-flag render (no-op if disabled)
+  synth.update();            // modulation / aftertouch LFO + L/R VU levels
+  display.update(millis());  // throttled, dirty-flag render (no-op if disabled)
 
-  if (cfg::LED_VU_ENABLED) {            // drive the L/R VU LEDs (squared = nicer fade)
+  if (cfg::LED_VU_ENABLED) {  // drive the L/R VU LEDs (squared = nicer fade)
     const float l = synth.levelLeft();
     const float r = synth.levelRight();
     analogWrite(cfg::LED_L_PIN, static_cast<int>(l * l * 255.0f));
