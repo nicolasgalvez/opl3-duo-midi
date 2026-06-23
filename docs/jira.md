@@ -9,8 +9,7 @@
 ## MCP Server
 
 - **Server:** `procyon_atlassian` (Streamable HTTP) — registered in `.mcp.json`
-- **URL:** https://mcp.atlassian.com/v1/mcp
-- The legacy SSE endpoint (`https://mcp.atlassian.com/v1/sse`) is deprecated and stops working after 30 June 2026.
+- **URL:** `https://mcp.atlassian.com/v1/mcp`
 - Tools are available as `mcp__procyon_atlassian__*` once Claude Code re-loads the project.
 
 ## Auth
