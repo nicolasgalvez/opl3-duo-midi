@@ -1,8 +1,9 @@
 #include "PatchEncoder.h"
+
 #include "Config.h"
 
-PatchEncoder::PatchEncoder(uint8_t pinA, uint8_t pinB, uint8_t pinButton,
-                           int minValue, int maxValue, int initial)
+PatchEncoder::PatchEncoder(uint8_t pinA, uint8_t pinB, uint8_t pinButton, int minValue,
+                           int maxValue, int initial)
     : _encoder(pinA, pinB),
       _pinButton(pinButton),
       _min(minValue),
@@ -12,8 +13,8 @@ PatchEncoder::PatchEncoder(uint8_t pinA, uint8_t pinB, uint8_t pinButton,
 
 void PatchEncoder::begin() {
   _button.attach(_pinButton, INPUT_PULLUP);
-  _button.interval(5);              // 5 ms debounce
-  _button.setPressedState(LOW);     // button pulls the pin to GND
+  _button.interval(5);           // 5 ms debounce
+  _button.setPressedState(LOW);  // button pulls the pin to GND
   _encoder.write(0);
   _lastDetent = 0;
 }
@@ -37,15 +38,13 @@ bool PatchEncoder::update() {
 
   const int range = _max - _min + 1;
   int v = _value + steps;
-  while (v > _max) v -= range;      // wrap around the patch range
+  while (v > _max) v -= range;  // wrap around the patch range
   while (v < _min) v += range;
   _value = v;
   return true;
 }
 
-bool PatchEncoder::buttonPressed() {
-  return _button.pressed();
-}
+bool PatchEncoder::buttonPressed() { return _button.pressed(); }
 
 void PatchEncoder::setValue(int v) {
   if (v < _min) v = _min;
