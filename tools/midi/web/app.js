@@ -15,6 +15,17 @@ const els = {
 }
 const ctx = els.eq.getContext('2d')
 
+// EQ palette pulled from the active theme's CSS variables.
+function eqColors() {
+  const cs = getComputedStyle(document.documentElement)
+  const v = (n, d) => cs.getPropertyValue(n).trim() || d
+  return {
+    low: v('--eq-low', '#4af07a'), mid: v('--eq-mid', '#ffcc33'), high: v('--eq-high', '#ff5a5a'),
+    off: v('--eq-off', '#0f3d20'), labelOn: v('--eq-label-on', '#4af07a'), labelOff: v('--eq-label-off', '#1f7a3c'),
+  }
+}
+const EQ = eqColors()
+
 function api(action, extra = {}) {
   fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...extra }) })
 }
@@ -112,14 +123,14 @@ function frame() {
     for (let s = 0; s < segs; s++) {
       const y = h - 14 - (s + 1) * segH + 1
       const frac = s / segs
-      const col = frac > 0.82 ? '#ff5a5a' : frac > 0.6 ? '#ffcc33' : '#4af07a'
+      const col = frac > 0.82 ? EQ.high : frac > 0.6 ? EQ.mid : EQ.low
       if (s < lit) { ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 6 }
       else if (s === peakSeg && peakSeg > 0) { ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 8 }
-      else { ctx.fillStyle = '#0f3d20'; ctx.shadowBlur = 0 }
+      else { ctx.fillStyle = EQ.off; ctx.shadowBlur = 0 }
       ctx.fillRect(x, y, barW, segH - 2)
     }
     ctx.shadowBlur = 0
-    ctx.fillStyle = lit > 0 ? '#4af07a' : '#1f7a3c'
+    ctx.fillStyle = lit > 0 ? EQ.labelOn : EQ.labelOff
     ctx.font = '10px monospace'
     ctx.textAlign = 'center'
     ctx.fillText(String(i + 1), x + barW / 2, h - 2)

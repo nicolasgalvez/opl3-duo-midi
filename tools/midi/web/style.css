@@ -7,7 +7,47 @@
   --amber: #ffcc33;
   --red: #ff5a5a;
   --font: "DejaVu Sans Mono", "Menlo", "Consolas", "Courier New", monospace;
+  /* EQ canvas palette (read by app.js / render.html via getComputedStyle) */
+  --eq-low: #4af07a;
+  --eq-mid: #ffcc33;
+  --eq-high: #ff5a5a;
+  --eq-off: #0f3d20;
+  --eq-label-on: #4af07a;
+  --eq-label-off: #1f7a3c;
+  --glow: 0.45;
 }
+
+/* ── Winamp-inspired theme: metallic charcoal, bright LCD green spectrum ── */
+[data-theme="winamp"] {
+  --bg: #0a0a0d;
+  --panel: #26262c;
+  --green: #1fe61f;
+  --green-dim: #2f9a3a;
+  --green-faint: #0d2a11;
+  --amber: #c8e64b;
+  --red: #ff3b3b;
+  --eq-low: #1fe61f;
+  --eq-mid: #e6dc28;
+  --eq-high: #ff3b3b;
+  --eq-off: #0c280e;
+  --eq-label-on: #1fe61f;
+  --eq-label-off: #2f9a3a;
+  --glow: 0;
+}
+/* Winamp didn't glow or scanline — flatten the CRT effects and bevel the panels */
+[data-theme="winamp"] html, [data-theme="winamp"] body { text-shadow: none; }
+[data-theme="winamp"] .scanlines { opacity: 0.18; }
+[data-theme="winamp"] .panel,
+[data-theme="winamp"] .topbar {
+  background: linear-gradient(180deg, #303036, #1c1c21);
+  border: 1px solid #3c3c45;
+  box-shadow: inset 1px 1px 0 #4d4d57, inset -1px -1px 0 #101013;
+}
+[data-theme="winamp"] .title,
+[data-theme="winamp"] .amber { text-shadow: none; }
+[data-theme="winamp"] button { background: linear-gradient(180deg, #34343b, #1f1f25); }
+[data-theme="winamp"] button:active { background: var(--green); }
+[data-theme="winamp"] #list li.cur { color: #000; }
 
 * { box-sizing: border-box; }
 
