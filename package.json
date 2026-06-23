@@ -1,0 +1,33 @@
+{
+  "name": "opl3-duo-midi-tooling",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Repo-wide dev tooling (format + lint pre-commit hooks) for the OPL3 Duo MIDI project. The firmware is C++ (PlatformIO); the companion CLI is in tools/midi.",
+  "type": "module",
+  "scripts": {
+    "prepare": "husky",
+    "format": "npm run format:cpp && npm run format:js",
+    "format:cpp": "git ls-files '*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hpp' '*.ino' | xargs clang-format -i",
+    "format:js": "prettier --write \"tools/midi/**/*.{js,mjs}\"",
+    "lint": "eslint tools/midi"
+  },
+  "lint-staged": {
+    "*.{c,cc,cpp,cxx,h,hpp,ino}": "clang-format -i",
+    "tools/midi/**/*.{js,mjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": "prettier --write"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.1.0",
+    "@commitlint/config-conventional": "^21.1.0",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.5.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.7.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.8",
+    "prettier": "^3.8.4"
+  }
+}
