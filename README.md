@@ -60,6 +60,8 @@ opl pc 24                                  # program change (GM patch)
 opl cc 10 0                                # any control change (here: pan left)
 opl play song.mid                          # play a Standard MIDI File
 opl play "/path/to/folder" -r --loop       # play a folder; n/p/space/q to control
+opl serve "<folder>" -r                    # web visualizer (below)
+opl render song.mid                        # headless video render (below)
 opl panic                                  # silence stuck notes
 ```
 
@@ -75,15 +77,94 @@ An ANSI/CRT-themed page with a 16-channel velocity **equalizer**, playlist, now-
 (track + folder), and transport. Pick the MIDI **output device** in the page (top-right) and
 press play. `Ctrl-C` stops the server.
 
-### MIDI library base path (`.env`)
+### Headless video renderer (`opl render`)
 
-Copy `tools/midi/.env.example` to `tools/midi/.env` and set `MIDI_LIBRARY` to your MIDI
-collection's path. Then **relative** folder names passed to `opl serve` / `opl play` resolve
-against it:
+Renders a MIDI file to a video file — plays the synth, records the audio from a
+system input device (BlackHole, ALSA, JACK, etc.), and captures the web visualizer
+via headless Playwright. The result is an H.264 MP4 ready for YouTube or social media.
+
+```bash
+# List available audio input devices
+opl render --list-audio
+
+# Basic render (uses OPL_AUDIO_DEVICE / OPL_MIDI_DEVICE from .env)
+opl render song.mid
+
+# Override audio device explicitly
+opl render song.mid --audio-device "BlackHole 2ch"
+
+# Vertical (Shorts/Reels/TikTok)
+opl render song.mid --ratio 9:16
+
+# With album art and custom output
+opl render song.mid --art cover.png -o video.mp4
+
+# Custom resolution + tail duration
+opl render song.mid --resolution 1920x1080 --tail 5
+
+# Batch: render every .mid in a folder as a separate video
+opl render "folder/" -r
+
+# Album: render all tracks in a folder as one continuous video
+opl render "folder/" --album -o doom-soundtrack.mp4
+
+# Instagram square
+opl render song.mid --ratio 1:1
+```
+
+Options:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--audio-device <name>` | `OPL_AUDIO_DEVICE` env | Audio input device (BlackHole 2ch, default, hw:1,0, …) |
+| `--ratio <preset>` | `16:9` | Aspect ratio: `16:9`, `9:16`, `1:1`, `4:5` |
+| `--resolution WxH` | *(from ratio)* | Custom resolution (overrides `--ratio`) |
+| `-o, --output <path>` | auto | Output `.mp4` file path |
+| `--art <path>` | *(none)* | Album art image to overlay |
+| `--tail <seconds>` | `3` | Recording tail after last MIDI note |
+| `--fps <n>` | `30` | Output video framerate |
+| `--device <name>` | `OPL_MIDI_DEVICE` env | MIDI output device substring (auto-detects if unset) |
+| `--keep-temps` | off | Keep intermediate WebM/WAV files |
+| `--list-audio` | — | List audio devices and exit |
+
+**How it works:** The command starts an internal web server with the visualizer,
+launches a headless Chromium browser (Playwright), records audio via `ffmpeg` from
+the specified input device, plays the MIDI file to the synth, then muxes the video
+and audio into the final MP4.
+
+**Prerequisites:** `ffmpeg` must be installed. Playwright is included in
+`tools/midi/package.json` — run `npm install` in `tools/midi/` if needed.
+
+**Audio routing:** The OPL3 board outputs analog audio from its line-out jack. To
+capture it, route the line-out into your computer's audio interface and use a
+loopback device (BlackHole on macOS, PulseAudio monitor source on Linux) or an
+aggregate device that includes the interface input.
+
+### MIDI library base path + device defaults (`.env`)
+
+Copy `tools/midi/.env.example` to `tools/midi/.env` and set:
+
+```bash
+# Base path to your MIDI collection. Relative `opl serve` / `opl play` paths
+# resolve against this when not found in the cwd.
+MIDI_LIBRARY=/path/to/midi/collection
+
+# Default audio input device for `opl render` (ffmpeg AVFoundation/ALSA name).
+# Run `opl render --list-audio` to see available devices.
+OPL_AUDIO_DEVICE=BlackHole 2ch
+
+# Default MIDI output device for `opl render` (substring match).
+# Leave unset to auto-detect (prefers "OPL3Duo", falls back to first port).
+OPL_MIDI_DEVICE=Clarett 4Pre MIDI
+```
+
+Then **relative** folder names passed to `opl serve` / `opl play` resolve against
+`MIDI_LIBRARY`:
 
 ```bash
 # with MIDI_LIBRARY=/path/to/collection
 opl serve "_Bobby Prince" -r       # -> /path/to/collection/_Bobby Prince
+opl render "_Bobby Prince/song.mid" # -> renders that track using .env device defaults
 ```
 
 ## Project layout

@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{{TITLE}}</title>
+<style>
+  :root {
+    --bg: #070b07;
+    --panel: #0b120b;
+    --green: #4af07a;
+    --green-dim: #1f7a3c;
+    --green-faint: #0f3d20;
+    --amber: #ffcc33;
+    --red: #ff5a5a;
+    --font: "DejaVu Sans Mono", "Menlo", "Consolas", "Courier New", monospace;
+    --eq-low: #4af07a;
+    --eq-mid: #ffcc33;
+    --eq-high: #ff5a5a;
+    --eq-off: #0f3d20;
+    --eq-label-on: #4af07a;
+    --eq-label-off: #1f7a3c;
+  }
+  /* Winamp-inspired theme: metallic charcoal + bright LCD green spectrum */
+  [data-theme="winamp"] {
+    --bg: #0a0a0d;
+    --panel: #26262c;
+    --green: #1fe61f;
+    --green-dim: #2f9a3a;
+    --green-faint: #0d2a11;
+    --amber: #c8e64b;
+    --red: #ff3b3b;
+    --eq-low: #1fe61f;
+    --eq-mid: #e6dc28;
+    --eq-high: #ff3b3b;
+    --eq-off: #0c280e;
+    --eq-label-on: #1fe61f;
+    --eq-label-off: #2f9a3a;
+  }
+  [data-theme="winamp"] body { text-shadow: none; }
+  [data-theme="winamp"] .scanlines { opacity: 0.18; }
+  [data-theme="winamp"] .eq-wrap {
+    background: linear-gradient(180deg, #303036, #1c1c21);
+    border: 1px solid #3c3c45;
+    box-shadow: inset 1px 1px 0 #4d4d57, inset -1px -1px 0 #101013;
+  }
+  [data-theme="winamp"] #track-name { text-shadow: none; }
+  [data-theme="winamp"] #art { border-color: #3c3c45; box-shadow: 0 0 30px rgba(0,0,0,0.5); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--green);
+    font-family: var(--font);
+    letter-spacing: 0.5px;
+  }
+
+  /* CRT scanline overlay */
+  .scanlines {
+    position: fixed; inset: 0; pointer-events: none; z-index: 100;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px, rgba(0,0,0,0.28) 3px
+    );
+    mix-blend-mode: multiply;
+  }
+  .vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 99;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%);
+  }
+
+  .render-page {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3vh 4vw;
+    gap: 2vh;
+  }
+
+  .header {
+    width: 100%;
+    text-align: center;
+    font-size: clamp(10px, 1.4vw, 16px);
+    color: var(--green-dim);
+    letter-spacing: 4px;
+    text-shadow: 0 0 4px rgba(74,240,122,0.3);
+    flex-shrink: 0;
+  }
+
+  .art-container {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 0;
+  }
+  #art {
+    max-width: min(55%, 55vh);
+    max-height: 100%;
+    object-fit: contain;
+    border: 2px solid var(--green-dim);
+    box-shadow: 0 0 30px rgba(74,240,122,0.15), inset 0 0 60px rgba(0,0,0,0.3);
+    image-rendering: auto;
+    display: none;
+  }
+  #art.visible { display: block; }
+
+  .track-info {
+    text-align: center;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+  }
+  #track-name {
+    font-size: clamp(14px, 2.2vw, 28px);
+    color: var(--amber);
+    text-shadow: 0 0 8px rgba(255,204,51,0.5);
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 90vw;
+  }
+  #folder-name {
+    font-size: clamp(10px, 1.4vw, 16px);
+    color: var(--green-dim);
+    text-shadow: 0 0 4px rgba(74,240,122,0.2);
+  }
+
+  .eq-container {
+    width: 100%;
+    flex-shrink: 0;
+    display: flex;
+    justify-content: center;
+  }
+  /* When art is visible, EQ gets a fixed portion. When no art, EQ expands. */
+  .render-page.has-art .art-container { flex: 1 1 auto; }
+  .render-page.has-art .eq-container { flex: 0 0 auto; height: 18vh; }
+  .render-page.no-art  .art-container { display: none; }
+  .render-page.no-art  .eq-container { flex: 1 1 auto; min-height: 0; }
+
+  .eq-wrap {
+    width: 100%;
+    height: 100%;
+    border: 2px solid var(--green-dim);
+    background: var(--panel);
+    padding: 8px;
+    position: relative;
+  }
+  .eq-wrap::before {
+    content: 'EQUALIZER . 16 CH';
+    position: absolute;
+    top: -10px; left: 10px;
+    background: var(--bg);
+    padding: 0 8px;
+    font-size: clamp(8px, 1vw, 12px);
+    letter-spacing: 2px;
+    color: var(--green-dim);
+  }
+  #eq {
+    width: 100%; height: 100%;
+    display: block;
+    image-rendering: pixelated;
+  }
+</style>
+</head>
+<body>
+  <div class="scanlines"></div>
+  <div class="vignette"></div>
+
+  <div class="render-page no-art" id="page">
+    <div class="header">- - - {{TITLE}} - - -</div>
+
+    <div class="art-container">
+      <img id="art" src="/art" alt="" />
+    </div>
+
+    <div class="track-info">
+      <div id="track-name">&mdash;</div>
+      <div id="folder-name"></div>
+    </div>
+
+    <div class="eq-container">
+      <div class="eq-wrap">
+        <canvas id="eq"></canvas>
+      </div>
+    </div>
+  </div>
+
+<script>
+'use strict'
+
+const CH = 16
+const channels = Array.from({ length: CH }, () => ({
+  notes: new Map(), vol: 1, exp: 1, level: 0, peak: 0
+}))
+
+const els = {
+  page: document.getElementById('page'),
+  art: document.getElementById('art'),
+  trackName: document.getElementById('track-name'),
+  folderName: document.getElementById('folder-name'),
+  eq: document.getElementById('eq'),
+}
+const ctx = els.eq.getContext('2d')
+
+// EQ palette pulled from the active theme's CSS variables.
+function eqColors() {
+  const cs = getComputedStyle(document.documentElement)
+  const v = (n, d) => cs.getPropertyValue(n).trim() || d
+  return {
+    low: v('--eq-low', '#4af07a'), mid: v('--eq-mid', '#ffcc33'), high: v('--eq-high', '#ff5a5a'),
+    off: v('--eq-off', '#0f3d20'), labelOn: v('--eq-label-on', '#4af07a'), labelOff: v('--eq-label-off', '#1f7a3c'),
+  }
+}
+const EQ = eqColors()
+
+// ---- album art visibility ----
+els.art.onload = () => {
+  els.art.classList.add('visible')
+  els.page.classList.remove('no-art')
+  els.page.classList.add('has-art')
+}
+els.art.onerror = () => {
+  els.art.classList.remove('visible')
+  els.page.classList.add('no-art')
+  els.page.classList.remove('has-art')
+}
+
+// ---- SSE event stream ----
+const es = new EventSource('/events')
+es.onmessage = (e) => {
+  const d = JSON.parse(e.data)
+  if (d.type === 'ev') applyEvent(d)
+  else if (d.type === 'reset') resetChannels()
+  else if (d.type === 'state') renderState(d)
+}
+
+function applyEvent(d) {
+  const c = channels[d.c]
+  if (!c) return
+  if (d.k === 'on') c.notes.set(d.a, d.b)
+  else if (d.k === 'off') c.notes.delete(d.a)
+  else if (d.k === 'cc') {
+    if (d.a === 7) c.vol = d.b / 127
+    else if (d.a === 11) c.exp = d.b / 127
+  }
+}
+
+function resetChannels() {
+  for (const c of channels) {
+    c.notes.clear(); c.level = 0; c.peak = 0; c.vol = 1; c.exp = 1
+  }
+}
+
+function renderState(s) {
+  const cur = s.playlist && s.playlist[s.index]
+  if (cur) {
+    const name = cur.name.replace(/\.midi?$/i, '')
+    if (els.trackName.dataset.name !== name) {
+      els.trackName.textContent = name
+      els.trackName.dataset.name = name
+    }
+    els.folderName.textContent = cur.folder || ''
+  }
+}
+
+// ---- equalizer canvas ----
+function frame() {
+  const dpr = window.devicePixelRatio || 1
+  const w = els.eq.clientWidth
+  const h = els.eq.clientHeight
+  if (els.eq.width !== w * dpr || els.eq.height !== h * dpr) {
+    els.eq.width = w * dpr; els.eq.height = h * dpr
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  ctx.clearRect(0, 0, w, h)
+
+  const segs = 24
+  const gap = Math.max(2, w * 0.005)
+  const labelH = Math.max(10, h * 0.06)
+  const barW = (w - gap * (CH + 1)) / CH
+  const segH = (h - labelH - 4) / segs
+
+  for (let i = 0; i < CH; i++) {
+    const c = channels[i]
+    let maxv = 0
+    for (const v of c.notes.values()) if (v > maxv) maxv = v
+    const target = Math.min(1, (maxv / 127) * c.vol * c.exp * 1.1)
+    c.level += (target - c.level) * (target > c.level ? 0.6 : 0.12)
+    c.peak = c.level > c.peak ? c.level : Math.max(c.level, c.peak - 0.012)
+
+    const x = gap + i * (barW + gap)
+    const lit = Math.round(c.level * segs)
+    const peakSeg = Math.round(c.peak * segs)
+
+    for (let s = 0; s < segs; s++) {
+      const y = h - labelH - (s + 1) * segH + 1
+      const frac = s / segs
+      const col = frac > 0.82 ? EQ.high : frac > 0.6 ? EQ.mid : EQ.low
+      if (s < lit) { ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 6 }
+      else if (s === peakSeg && peakSeg > 0) { ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 8 }
+      else { ctx.fillStyle = EQ.off; ctx.shadowBlur = 0 }
+      ctx.fillRect(x, y, barW, Math.max(1, segH - 2))
+    }
+    ctx.shadowBlur = 0
+    ctx.fillStyle = lit > 0 ? EQ.labelOn : EQ.labelOff
+    ctx.font = `${Math.max(8, labelH * 0.7)}px monospace`
+    ctx.textAlign = 'center'
+    ctx.fillText(String(i + 1), x + barW / 2, h - 2)
+  }
+  requestAnimationFrame(frame)
+}
+requestAnimationFrame(frame)
+</script>
+</body>
+</html>
