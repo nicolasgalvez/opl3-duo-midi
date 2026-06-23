@@ -35,14 +35,31 @@ const { Midi } = toneMidiPkg
 const { RtAudio, RtAudioFormat } = audify
 
 // Load tools/midi/.env (e.g. MIDI_LIBRARY) if present.
-try { process.loadEnvFile(join(dirname(fileURLToPath(import.meta.url)), '.env')) } catch { /* no .env file */ }
+try {
+  process.loadEnvFile(join(dirname(fileURLToPath(import.meta.url)), '.env'))
+} catch {
+  /* no .env file */
+}
 
 // Resolve a path; for a relative path not found in cwd, fall back to MIDI_LIBRARY.
 function resolveLib(p) {
   if (isAbsolute(p)) return p
-  try { statSync(p); return p } catch { /* not relative to cwd */ }
+  try {
+    statSync(p)
+    return p
+  } catch {
+    /* not relative to cwd */
+  }
   const base = process.env.MIDI_LIBRARY
-  if (base) { const alt = join(base, p); try { statSync(alt); return alt } catch { /* not in library */ } }
+  if (base) {
+    const alt = join(base, p)
+    try {
+      statSync(alt)
+      return alt
+    } catch {
+      /* not in library */
+    }
+  }
   return p
 }
 import { hideBin } from 'yargs/helpers'
@@ -51,38 +68,134 @@ const DEFAULT_PORT_MATCH = 'OPL3Duo'
 const MIDI_EXTS = ['.mid', '.midi']
 
 const GM_NAMES = [
-  'Acoustic Grand Piano', 'Bright Acoustic Piano', 'Electric Grand Piano', 'Honky-tonk Piano',
-  'Electric Piano 1', 'Electric Piano 2', 'Harpsichord', 'Clavinet',
-  'Celesta', 'Glockenspiel', 'Music Box', 'Vibraphone',
-  'Marimba', 'Xylophone', 'Tubular Bells', 'Dulcimer',
-  'Drawbar Organ', 'Percussive Organ', 'Rock Organ', 'Church Organ',
-  'Reed Organ', 'Accordion', 'Harmonica', 'Tango Accordion',
-  'Acoustic Guitar (nylon)', 'Acoustic Guitar (steel)', 'Electric Guitar (jazz)', 'Electric Guitar (clean)',
-  'Electric Guitar (muted)', 'Overdriven Guitar', 'Distortion Guitar', 'Guitar Harmonics',
-  'Acoustic Bass', 'Electric Bass (finger)', 'Electric Bass (pick)', 'Fretless Bass',
-  'Slap Bass 1', 'Slap Bass 2', 'Synth Bass 1', 'Synth Bass 2',
-  'Violin', 'Viola', 'Cello', 'Contrabass',
-  'Tremolo Strings', 'Pizzicato Strings', 'Orchestral Harp', 'Timpani',
-  'String Ensemble 1', 'String Ensemble 2', 'Synth Strings 1', 'Synth Strings 2',
-  'Choir Aahs', 'Voice Oohs', 'Synth Voice', 'Orchestra Hit',
-  'Trumpet', 'Trombone', 'Tuba', 'Muted Trumpet',
-  'French Horn', 'Brass Section', 'Synth Brass 1', 'Synth Brass 2',
-  'Soprano Sax', 'Alto Sax', 'Tenor Sax', 'Baritone Sax',
-  'Oboe', 'English Horn', 'Bassoon', 'Clarinet',
-  'Piccolo', 'Flute', 'Recorder', 'Pan Flute',
-  'Blown Bottle', 'Shakuhachi', 'Whistle', 'Ocarina',
-  'Lead 1 (square)', 'Lead 2 (sawtooth)', 'Lead 3 (calliope)', 'Lead 4 (chiff)',
-  'Lead 5 (charang)', 'Lead 6 (voice)', 'Lead 7 (fifths)', 'Lead 8 (bass + lead)',
-  'Pad 1 (new age)', 'Pad 2 (warm)', 'Pad 3 (polysynth)', 'Pad 4 (choir)',
-  'Pad 5 (bowed)', 'Pad 6 (metallic)', 'Pad 7 (halo)', 'Pad 8 (sweep)',
-  'FX 1 (rain)', 'FX 2 (soundtrack)', 'FX 3 (crystal)', 'FX 4 (atmosphere)',
-  'FX 5 (brightness)', 'FX 6 (goblins)', 'FX 7 (echoes)', 'FX 8 (sci-fi)',
-  'Sitar', 'Banjo', 'Shamisen', 'Koto',
-  'Kalimba', 'Bagpipe', 'Fiddle', 'Shanai',
-  'Tinkle Bell', 'Agogo', 'Steel Drums', 'Woodblock',
-  'Taiko Drum', 'Melodic Tom', 'Synth Drum', 'Reverse Cymbal',
-  'Guitar Fret Noise', 'Breath Noise', 'Seashore', 'Bird Tweet',
-  'Telephone Ring', 'Helicopter', 'Applause', 'Gunshot',
+  'Acoustic Grand Piano',
+  'Bright Acoustic Piano',
+  'Electric Grand Piano',
+  'Honky-tonk Piano',
+  'Electric Piano 1',
+  'Electric Piano 2',
+  'Harpsichord',
+  'Clavinet',
+  'Celesta',
+  'Glockenspiel',
+  'Music Box',
+  'Vibraphone',
+  'Marimba',
+  'Xylophone',
+  'Tubular Bells',
+  'Dulcimer',
+  'Drawbar Organ',
+  'Percussive Organ',
+  'Rock Organ',
+  'Church Organ',
+  'Reed Organ',
+  'Accordion',
+  'Harmonica',
+  'Tango Accordion',
+  'Acoustic Guitar (nylon)',
+  'Acoustic Guitar (steel)',
+  'Electric Guitar (jazz)',
+  'Electric Guitar (clean)',
+  'Electric Guitar (muted)',
+  'Overdriven Guitar',
+  'Distortion Guitar',
+  'Guitar Harmonics',
+  'Acoustic Bass',
+  'Electric Bass (finger)',
+  'Electric Bass (pick)',
+  'Fretless Bass',
+  'Slap Bass 1',
+  'Slap Bass 2',
+  'Synth Bass 1',
+  'Synth Bass 2',
+  'Violin',
+  'Viola',
+  'Cello',
+  'Contrabass',
+  'Tremolo Strings',
+  'Pizzicato Strings',
+  'Orchestral Harp',
+  'Timpani',
+  'String Ensemble 1',
+  'String Ensemble 2',
+  'Synth Strings 1',
+  'Synth Strings 2',
+  'Choir Aahs',
+  'Voice Oohs',
+  'Synth Voice',
+  'Orchestra Hit',
+  'Trumpet',
+  'Trombone',
+  'Tuba',
+  'Muted Trumpet',
+  'French Horn',
+  'Brass Section',
+  'Synth Brass 1',
+  'Synth Brass 2',
+  'Soprano Sax',
+  'Alto Sax',
+  'Tenor Sax',
+  'Baritone Sax',
+  'Oboe',
+  'English Horn',
+  'Bassoon',
+  'Clarinet',
+  'Piccolo',
+  'Flute',
+  'Recorder',
+  'Pan Flute',
+  'Blown Bottle',
+  'Shakuhachi',
+  'Whistle',
+  'Ocarina',
+  'Lead 1 (square)',
+  'Lead 2 (sawtooth)',
+  'Lead 3 (calliope)',
+  'Lead 4 (chiff)',
+  'Lead 5 (charang)',
+  'Lead 6 (voice)',
+  'Lead 7 (fifths)',
+  'Lead 8 (bass + lead)',
+  'Pad 1 (new age)',
+  'Pad 2 (warm)',
+  'Pad 3 (polysynth)',
+  'Pad 4 (choir)',
+  'Pad 5 (bowed)',
+  'Pad 6 (metallic)',
+  'Pad 7 (halo)',
+  'Pad 8 (sweep)',
+  'FX 1 (rain)',
+  'FX 2 (soundtrack)',
+  'FX 3 (crystal)',
+  'FX 4 (atmosphere)',
+  'FX 5 (brightness)',
+  'FX 6 (goblins)',
+  'FX 7 (echoes)',
+  'FX 8 (sci-fi)',
+  'Sitar',
+  'Banjo',
+  'Shamisen',
+  'Koto',
+  'Kalimba',
+  'Bagpipe',
+  'Fiddle',
+  'Shanai',
+  'Tinkle Bell',
+  'Agogo',
+  'Steel Drums',
+  'Woodblock',
+  'Taiko Drum',
+  'Melodic Tom',
+  'Synth Drum',
+  'Reverse Cymbal',
+  'Guitar Fret Noise',
+  'Breath Noise',
+  'Seashore',
+  'Bird Tweet',
+  'Telephone Ring',
+  'Helicopter',
+  'Applause',
+  'Gunshot',
 ]
 
 // --------------------------------------------------------------------------
@@ -109,9 +222,9 @@ function openOutput(requested) {
 
 function allNotesOff(out) {
   for (let ch = 0; ch < 16; ch++) {
-    out.send('cc', { controller: 64, value: 0, channel: ch })   // sustain off
-    out.send('cc', { controller: 120, value: 0, channel: ch })  // all sound off
-    out.send('cc', { controller: 123, value: 0, channel: ch })  // all notes off
+    out.send('cc', { controller: 64, value: 0, channel: ch }) // sustain off
+    out.send('cc', { controller: 120, value: 0, channel: ch }) // all sound off
+    out.send('cc', { controller: 123, value: 0, channel: ch }) // all notes off
   }
 }
 
@@ -189,19 +302,25 @@ function collectFiles(paths, recursive) {
   for (const raw of paths) {
     const p = resolveLib(raw)
     let st
-    try { st = statSync(p) } catch { console.error('skip (not found):', raw); continue }
+    try {
+      st = statSync(p)
+    } catch {
+      console.error('skip (not found):', raw)
+      continue
+    }
     if (st.isDirectory()) {
       const walk = (dir) => {
         for (const nm of readdirSync(dir).sort()) {
           const full = join(dir, nm)
           const s = statSync(full)
-          if (s.isDirectory()) { if (recursive) walk(full) }
-          else if (isMidi(full)) out.push(full)
+          if (s.isDirectory()) {
+            if (recursive) walk(full)
+          } else if (isMidi(full)) out.push(full)
         }
       }
       walk(p)
     } else {
-      out.push(p)  // explicit file (let the parser try even odd extensions)
+      out.push(p) // explicit file (let the parser try even odd extensions)
     }
   }
   return [...new Set(out)]
@@ -223,7 +342,10 @@ function buildEvents(out, path, forceCh) {
     }
     for (const num of Object.keys(track.controlChanges)) {
       for (const c of track.controlChanges[num]) {
-        events.push({ t: c.time, fn: () => out.send('cc', { controller: c.number, value: Math.round(c.value * 127), channel: ch }) })
+        events.push({
+          t: c.time,
+          fn: () => out.send('cc', { controller: c.number, value: Math.round(c.value * 127), channel: ch }),
+        })
       }
     }
     for (const pb of track.pitchBends) {
@@ -241,7 +363,10 @@ function makeKeys() {
   process.stdin.setRawMode(true)
   const em = new EventEmitter()
   const handler = (str, key) => {
-    if (key && key.ctrl && key.name === 'c') { em.emit('key', 'q'); return }
+    if (key && key.ctrl && key.name === 'c') {
+      em.emit('key', 'q')
+      return
+    }
     em.emit('key', str)
   }
   process.stdin.on('keypress', handler)
@@ -256,8 +381,12 @@ function makeKeys() {
 // Returns 'next' | 'prev' | 'quit' | 'done'.
 function playOne(out, path, forceCh, keys) {
   let info
-  try { info = buildEvents(out, path, forceCh) }
-  catch (e) { console.error(`   ! skip (${e.message})`); return Promise.resolve('next') }
+  try {
+    info = buildEvents(out, path, forceCh)
+  } catch (e) {
+    console.error(`   ! skip (${e.message})`)
+    return Promise.resolve('next')
+  }
 
   process.stdout.write(`▶  ${basename(path)}  (~${info.duration.toFixed(0)}s)\n`)
   return new Promise((resolve) => {
@@ -277,8 +406,16 @@ function playOne(out, path, forceCh, keys) {
       else if (k === 'p') finish('prev')
       else if (k === 'q') finish('quit')
       else if (k === ' ') {
-        if (!paused) { paused = true; pauseAt = performance.now(); allNotesOff(out); process.stdout.write('   ⏸  paused\n') }
-        else { paused = false; start += performance.now() - pauseAt; process.stdout.write('   ▶  resumed\n') }
+        if (!paused) {
+          paused = true
+          pauseAt = performance.now()
+          allNotesOff(out)
+          process.stdout.write('   ⏸  paused\n')
+        } else {
+          paused = false
+          start += performance.now() - pauseAt
+          process.stdout.write('   ▶  resumed\n')
+        }
       }
     }
     if (keys) keys.on('key', onKey)
@@ -287,7 +424,11 @@ function playOne(out, path, forceCh, keys) {
       if (paused) return
       const elapsed = (performance.now() - start) / 1000
       while (idx < events.length && events[idx].t <= elapsed) {
-        try { events[idx].fn() } catch { /* ignore a bad event */ }
+        try {
+          events[idx].fn()
+        } catch {
+          /* ignore a bad event */
+        }
         idx++
       }
       if (idx >= events.length) finish('done')
@@ -297,21 +438,34 @@ function playOne(out, path, forceCh, keys) {
 
 async function cmdPlay(argv) {
   let files = collectFiles(argv.paths, argv.recursive)
-  if (files.length === 0) { console.error('No MIDI files found.'); process.exit(1) }
+  if (files.length === 0) {
+    console.error('No MIDI files found.')
+    process.exit(1)
+  }
   if (argv.shuffle) files.sort(() => Math.random() - 0.5)
 
   const { out, name } = openOutput(argv.port)
   const keys = makeKeys()
-  console.log(`${name}: ${files.length} track(s).`
-    + (keys ? '  controls: n=next p=prev space=pause q=quit' : '  (non-interactive)'))
+  console.log(
+    `${name}: ${files.length} track(s).` +
+      (keys ? '  controls: n=next p=prev space=pause q=quit' : '  (non-interactive)'),
+  )
 
-  const cleanup = () => { allNotesOff(out); if (keys) keys.close(); out.close() }
-  process.on('SIGINT', () => { console.log('\nstopped.'); cleanup(); process.exit(0) })
+  const cleanup = () => {
+    allNotesOff(out)
+    if (keys) keys.close()
+    out.close()
+  }
+  process.on('SIGINT', () => {
+    console.log('\nstopped.')
+    cleanup()
+    process.exit(0)
+  })
 
   let i = 0
   while (i >= 0 && i < files.length) {
     process.stdout.write(`[${i + 1}/${files.length}] `)
-    const action = await playOne(out, files[i], argv.ch, keys) // eslint-disable-line no-await-in-loop
+    const action = await playOne(out, files[i], argv.ch, keys)
     allNotesOff(out)
     if (action === 'quit') break
     i = action === 'prev' ? Math.max(0, i - 1) : i + 1
@@ -355,11 +509,21 @@ function buildEventList(path, forceCh) {
 
 function sendRaw(out, ev) {
   switch (ev.k) {
-    case 'on': out.send('noteon', { note: ev.a, velocity: ev.b, channel: ev.c }); break
-    case 'off': out.send('noteoff', { note: ev.a, velocity: 0, channel: ev.c }); break
-    case 'cc': out.send('cc', { controller: ev.a, value: ev.b, channel: ev.c }); break
-    case 'pitch': out.send('pitch', { value: ev.a, channel: ev.c }); break
-    case 'program': out.send('program', { number: ev.a, channel: ev.c }); break
+    case 'on':
+      out.send('noteon', { note: ev.a, velocity: ev.b, channel: ev.c })
+      break
+    case 'off':
+      out.send('noteoff', { note: ev.a, velocity: 0, channel: ev.c })
+      break
+    case 'cc':
+      out.send('cc', { controller: ev.a, value: ev.b, channel: ev.c })
+      break
+    case 'pitch':
+      out.send('pitch', { value: ev.a, channel: ev.c })
+      break
+    case 'program':
+      out.send('program', { number: ev.a, channel: ev.c })
+      break
   }
 }
 
@@ -389,10 +553,21 @@ class Engine {
   }
 
   selectDevice(name) {
-    if (this.out) { try { this.allNotesOff(); this.out.close() } catch { /* ignore */ } this.out = null }
+    if (this.out) {
+      try {
+        this.allNotesOff()
+        this.out.close()
+      } catch {
+        /* ignore */
+      }
+      this.out = null
+    }
     const outs = easymidi.getOutputs()
     const found = outs.find((n) => n === name) || outs.find((n) => n.toLowerCase().includes((name || '').toLowerCase()))
-    if (found) { this.out = new easymidi.Output(found); this.deviceName = found }
+    if (found) {
+      this.out = new easymidi.Output(found)
+      this.deviceName = found
+    }
     this.broadcastState()
   }
 
@@ -400,19 +575,54 @@ class Engine {
     if (i < 0 || i >= this.playlist.length) return
     this.allNotesOff()
     this.index = i
-    try { const r = buildEventList(this.playlist[i].path); this.events = r.events; this.duration = r.duration }
-    catch { this.events = []; this.duration = 0 }
+    try {
+      const r = buildEventList(this.playlist[i].path)
+      this.events = r.events
+      this.duration = r.duration
+    } catch {
+      this.events = []
+      this.duration = 0
+    }
     this.evIndex = 0
     this.elapsed = 0
     this.broadcast({ type: 'reset' })
     this.broadcastState()
   }
 
-  play() { if (this.out && this.events.length) { this.playing = true; this.lastTick = performance.now(); this.broadcastState() } }
-  pause() { this.playing = false; this.allNotesOff(); this.broadcast({ type: 'reset' }); this.broadcastState() }
-  stop() { this.playing = false; this.evIndex = 0; this.elapsed = 0; this.allNotesOff(); this.broadcast({ type: 'reset' }); this.broadcastState() }
-  next() { if (this.playlist.length === 0) return; if (this.single) { this.stop(); return } this.load((this.index + 1) % this.playlist.length); this.play() }
-  prev() { this.load(this.index > 0 ? this.index - 1 : 0); this.play() }
+  play() {
+    if (this.out && this.events.length) {
+      this.playing = true
+      this.lastTick = performance.now()
+      this.broadcastState()
+    }
+  }
+  pause() {
+    this.playing = false
+    this.allNotesOff()
+    this.broadcast({ type: 'reset' })
+    this.broadcastState()
+  }
+  stop() {
+    this.playing = false
+    this.evIndex = 0
+    this.elapsed = 0
+    this.allNotesOff()
+    this.broadcast({ type: 'reset' })
+    this.broadcastState()
+  }
+  next() {
+    if (this.playlist.length === 0) return
+    if (this.single) {
+      this.stop()
+      return
+    }
+    this.load((this.index + 1) % this.playlist.length)
+    this.play()
+  }
+  prev() {
+    this.load(this.index > 0 ? this.index - 1 : 0)
+    this.play()
+  }
 
   allNotesOff() {
     if (!this.out) return
@@ -430,9 +640,13 @@ class Engine {
     while (this.evIndex < this.events.length && this.events[this.evIndex].t <= this.elapsed) {
       const ev = this.events[this.evIndex++]
       if (this.out) sendRaw(this.out, ev)
-      if (ev.k === 'on' || ev.k === 'off' || ev.k === 'cc') this.broadcast({ type: 'ev', k: ev.k, c: ev.c, a: ev.a, b: ev.b })
+      if (ev.k === 'on' || ev.k === 'off' || ev.k === 'cc')
+        this.broadcast({ type: 'ev', k: ev.k, c: ev.c, a: ev.a, b: ev.b })
     }
-    if (now - this.lastPos > 100) { this.lastPos = now; this.broadcast({ type: 'pos', t: this.elapsed, d: this.duration }) }
+    if (now - this.lastPos > 100) {
+      this.lastPos = now
+      this.broadcast({ type: 'pos', t: this.elapsed, d: this.duration })
+    }
     if (this.evIndex >= this.events.length) this.next()
   }
 
@@ -449,15 +663,23 @@ class Engine {
     }
   }
 
-  broadcastState() { this.broadcast(this.state()) }
+  broadcastState() {
+    this.broadcast(this.state())
+  }
   broadcast(obj) {
     const s = `data: ${JSON.stringify(obj)}\n\n`
-    for (const res of this.clients) { try { res.write(s) } catch { /* ignore */ } }
+    for (const res of this.clients) {
+      try {
+        res.write(s)
+      } catch {
+        /* ignore */
+      }
+    }
   }
 }
 
 function escapeHtml(s) {
-  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 }
 
 function contentType(f) {
@@ -485,31 +707,64 @@ function createServer(engine, port) {
     }
     if (u.pathname === '/api' && req.method === 'POST') {
       let body = ''
-      req.on('data', (d) => { body += d })
+      req.on('data', (d) => {
+        body += d
+      })
       req.on('end', () => {
         let m = {}
-        try { m = JSON.parse(body) } catch { /* ignore */ }
-        const fns = { device: () => engine.selectDevice(m.name), load: () => engine.load(m.index), play: () => engine.play(), pause: () => engine.pause(), next: () => engine.next(), prev: () => engine.prev(), stop: () => engine.stop() }
+        try {
+          m = JSON.parse(body)
+        } catch {
+          /* ignore */
+        }
+        const fns = {
+          device: () => engine.selectDevice(m.name),
+          load: () => engine.load(m.index),
+          play: () => engine.play(),
+          pause: () => engine.pause(),
+          next: () => engine.next(),
+          prev: () => engine.prev(),
+          stop: () => engine.stop(),
+        }
         if (fns[m.action]) fns[m.action]()
-        res.writeHead(200); res.end('ok')
+        res.writeHead(200)
+        res.end('ok')
       })
       return
     }
     if (u.pathname === '/art' && engine.artPath) {
-      try { const data = readFileSync(engine.artPath); res.writeHead(200, { 'Content-Type': contentType(engine.artPath) }); res.end(data) }
-      catch { res.writeHead(404); res.end() }
+      try {
+        const data = readFileSync(engine.artPath)
+        res.writeHead(200, { 'Content-Type': contentType(engine.artPath) })
+        res.end(data)
+      } catch {
+        res.writeHead(404)
+        res.end()
+      }
       return
     }
     const file = join(webDir, u.pathname === '/' ? '/index.html' : u.pathname)
-    if (!file.startsWith(webDir)) { res.writeHead(403); res.end(); return }
+    if (!file.startsWith(webDir)) {
+      res.writeHead(403)
+      res.end()
+      return
+    }
     let data
-    try { data = readFileSync(file) } catch { res.writeHead(404); res.end('not found'); return }
+    try {
+      data = readFileSync(file)
+    } catch {
+      res.writeHead(404)
+      res.end('not found')
+      return
+    }
     if (file.endsWith('.html')) {
       // Inject the selected theme (data-theme drives CSS with no flash) and the
       // configurable app title (replaces the {{TITLE}} placeholder in the pages).
-      data = Buffer.from(String(data)
-        .replace('<html lang="en">', `<html lang="en" data-theme="${engine.theme || 'green'}">`)
-        .replaceAll('{{TITLE}}', escapeHtml(engine.title || 'OPL · MIDI PLAYER')))
+      data = Buffer.from(
+        String(data)
+          .replace('<html lang="en">', `<html lang="en" data-theme="${engine.theme || 'green'}">`)
+          .replaceAll('{{TITLE}}', escapeHtml(engine.title || 'OPL · MIDI PLAYER')),
+      )
     }
     res.writeHead(200, { 'Content-Type': contentType(file) })
     res.end(data)
@@ -534,7 +789,10 @@ function cmdServe(argv) {
   console.log(`folder: ${folder}  (${files.length} tracks)   device: ${engine.deviceName || 'none'}`)
   console.log('Ctrl-C to stop.')
 
-  process.on('SIGINT', () => { engine.allNotesOff(); process.exit(0) })
+  process.on('SIGINT', () => {
+    engine.allNotesOff()
+    process.exit(0)
+  })
 }
 
 // --------------------------------------------------------------------------
@@ -546,14 +804,17 @@ function cmdServe(argv) {
 const RATIOS = {
   '16:9': { w: 1280, h: 720 },
   '9:16': { w: 720, h: 1280 },
-  '1:1':  { w: 1080, h: 1080 },
-  '4:5':  { w: 1080, h: 1350 },
+  '1:1': { w: 1080, h: 1080 },
+  '4:5': { w: 1080, h: 1350 },
 }
 
 function getFreePort() {
   return new Promise((resolve) => {
     const srv = net.createServer()
-    srv.listen(0, () => { const port = srv.address().port; srv.close(() => resolve(port)) })
+    srv.listen(0, () => {
+      const port = srv.address().port
+      srv.close(() => resolve(port))
+    })
   })
 }
 
@@ -567,13 +828,22 @@ function findInputDevice(name) {
 }
 
 function writeWav(path, pcm, sampleRate, channels) {
-  const bps = 16, blockAlign = channels * bps / 8
+  const bps = 16,
+    blockAlign = (channels * bps) / 8
   const h = Buffer.alloc(44)
-  h.write('RIFF', 0); h.writeUInt32LE(36 + pcm.length, 4); h.write('WAVE', 8)
-  h.write('fmt ', 12); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20)
-  h.writeUInt16LE(channels, 22); h.writeUInt32LE(sampleRate, 24)
-  h.writeUInt32LE(sampleRate * blockAlign, 28); h.writeUInt16LE(blockAlign, 32)
-  h.writeUInt16LE(bps, 34); h.write('data', 36); h.writeUInt32LE(pcm.length, 40)
+  h.write('RIFF', 0)
+  h.writeUInt32LE(36 + pcm.length, 4)
+  h.write('WAVE', 8)
+  h.write('fmt ', 12)
+  h.writeUInt32LE(16, 16)
+  h.writeUInt16LE(1, 20)
+  h.writeUInt16LE(channels, 22)
+  h.writeUInt32LE(sampleRate, 24)
+  h.writeUInt32LE(sampleRate * blockAlign, 28)
+  h.writeUInt16LE(blockAlign, 32)
+  h.writeUInt16LE(bps, 34)
+  h.write('data', 36)
+  h.writeUInt32LE(pcm.length, 40)
   writeFileSync(path, Buffer.concat([h, pcm]))
 }
 
@@ -593,7 +863,9 @@ function startAudioCapture({ device, channels, rate, outFile }) {
     null,
     { deviceId: dev.id, nChannels, firstChannel },
     RtAudioFormat.RTAUDIO_SINT16,
-    rate, 1920, 'opl-render',
+    rate,
+    1920,
+    'opl-render',
     (buf) => chunks.push(Buffer.from(buf)),
     null,
   )
@@ -601,8 +873,16 @@ function startAudioCapture({ device, channels, rate, outFile }) {
   return {
     deviceName: dev.name,
     stop() {
-      try { rt.stop() } catch { /* ignore */ }
-      try { rt.closeStream() } catch { /* ignore */ }
+      try {
+        rt.stop()
+      } catch {
+        /* ignore */
+      }
+      try {
+        rt.closeStream()
+      } catch {
+        /* ignore */
+      }
       const pcm = Buffer.concat(chunks)
       writeWav(outFile, pcm, rate, nChannels)
       return pcm.length / 2 / nChannels
@@ -642,11 +922,14 @@ async function resolveRenderOpts(argv) {
   const audioRate = Number(argv.audioRate || process.env.OPL_AUDIO_RATE || 48000)
 
   const outs = easymidi.getOutputs()
-  if (outs.length === 0) { console.error('No MIDI output ports found.'); process.exit(1) }
+  if (outs.length === 0) {
+    console.error('No MIDI output ports found.')
+    process.exit(1)
+  }
   const midiMatch = argv.device || process.env.OPL_MIDI_DEVICE
   const devName = midiMatch
-    ? (outs.find((n) => n === midiMatch) || outs.find((n) => n.toLowerCase().includes(midiMatch.toLowerCase())))
-    : (outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0])
+    ? outs.find((n) => n === midiMatch) || outs.find((n) => n.toLowerCase().includes(midiMatch.toLowerCase()))
+    : outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0]
 
   let chromium
   try {
@@ -675,8 +958,13 @@ async function renderSession({ playlist, singleMode, totalDuration, outPath, lab
       console.error('URL-based art is not yet supported. Use a local file path for --art.')
       process.exit(1)
     }
-    try { statSync(argv.art); engine.artPath = argv.art }
-    catch { console.error(`Art file not found: ${argv.art}`); process.exit(1) }
+    try {
+      statSync(argv.art)
+      engine.artPath = argv.art
+    } catch {
+      console.error(`Art file not found: ${argv.art}`)
+      process.exit(1)
+    }
   }
   if (devName) engine.selectDevice(devName)
   engine.load(0)
@@ -688,17 +976,39 @@ async function renderSession({ playlist, singleMode, totalDuration, outPath, lab
 
   let cleaned = false
   const cleanup = () => {
-    if (cleaned) return; cleaned = true
-    try { clearInterval(engine.timer) } catch { /* ignore */ }
-    try { engine.allNotesOff() } catch { /* ignore */ }
+    if (cleaned) return
+    cleaned = true
+    try {
+      clearInterval(engine.timer)
+    } catch {
+      /* ignore */
+    }
+    try {
+      engine.allNotesOff()
+    } catch {
+      /* ignore */
+    }
     // Closing the MIDI port releases the CoreMIDI handle that keeps the
     // libuv event loop alive — without this the process hangs after "Done:".
-    try { if (engine.out) { engine.out.close(); engine.out = null } } catch { /* ignore */ }
-    try { server.close() } catch { /* ignore */ }
+    try {
+      if (engine.out) {
+        engine.out.close()
+        engine.out = null
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      server.close()
+    } catch {
+      /* ignore */
+    }
   }
 
   console.log(`\nRendering: ${label}  (${totalDuration.toFixed(1)}s)`)
-  console.log(`Resolution: ${dims.w}x${dims.h}  Audio: ${audioDevice}${audioChannels ? ` ch${audioChannels}` : ''} @ ${audioRate}Hz  MIDI: ${devName}`)
+  console.log(
+    `Resolution: ${dims.w}x${dims.h}  Audio: ${audioDevice}${audioChannels ? ` ch${audioChannels}` : ''} @ ${audioRate}Hz  MIDI: ${devName}`,
+  )
 
   const browser = await chromium.launch({ headless: true })
   const context = await browser.newContext({
@@ -708,10 +1018,15 @@ async function renderSession({ playlist, singleMode, totalDuration, outPath, lab
   const page = await context.newPage()
 
   await page.goto(`http://localhost:${port}/render.html`, { waitUntil: 'domcontentloaded' })
-  await page.waitForFunction(() => {
-    const el = document.getElementById('track-name')
-    return el && el.textContent && el.textContent.trim().length > 0 && el.textContent.trim() !== '\u2014'
-  }, { timeout: 5000 }).catch(() => {})
+  await page
+    .waitForFunction(
+      () => {
+        const el = document.getElementById('track-name')
+        return el && el.textContent && el.textContent.trim().length > 0 && el.textContent.trim() !== '\u2014'
+      },
+      { timeout: 5000 },
+    )
+    .catch(() => {})
 
   // Start audio recording via audify (RtAudio -> CoreAudio).
   const recDur = totalDuration + 0.5
@@ -719,7 +1034,9 @@ async function renderSession({ playlist, singleMode, totalDuration, outPath, lab
   try {
     cap = startAudioCapture({ device: audioDevice, channels: audioChannels, rate: audioRate, outFile: audioFile })
   } catch (e) {
-    console.error(e.message); cleanup(); process.exit(1)
+    console.error(e.message)
+    cleanup()
+    process.exit(1)
   }
 
   await sleep(300)
@@ -734,43 +1051,75 @@ async function renderSession({ playlist, singleMode, totalDuration, outPath, lab
   await browser.close()
 
   const webmFiles = readdirSync(tmpDir).filter((f) => f.endsWith('.webm'))
-  if (webmFiles.length === 0) { console.error('No video file created.'); cleanup(); process.exit(1) }
+  if (webmFiles.length === 0) {
+    console.error('No video file created.')
+    cleanup()
+    process.exit(1)
+  }
   const videoFile = join(tmpDir, webmFiles[0])
 
-  try { statSync(audioFile) } catch {
+  try {
+    statSync(audioFile)
+  } catch {
     console.error('Audio recording failed: no audio file written.')
-    cleanup(); process.exit(1)
+    cleanup()
+    process.exit(1)
   }
 
   console.log('Encoding final video...')
   const muxArgs = [
-    '-i', videoFile, '-i', audioFile,
-    '-c:v', 'libx264', '-preset', 'medium', '-crf', '18',
-    '-pix_fmt', 'yuv420p',
+    '-i',
+    videoFile,
+    '-i',
+    audioFile,
+    '-c:v',
+    'libx264',
+    '-preset',
+    'medium',
+    '-crf',
+    '18',
+    '-pix_fmt',
+    'yuv420p',
     // -r AFTER the inputs is an output option: ffmpeg keeps the webm's real
     // (variable-rate) timestamps and resamples to constant fps, preserving
     // duration. Before -i it would force-reinterpret the VFR webm as Nfps and
     // compress the timeline (~20% fast). -shortest trims to the audio length.
-    '-r', String(argv.fps),
-    '-c:a', 'aac', '-b:a', '192k',
-    '-movflags', '+faststart',
+    '-r',
+    String(argv.fps),
+    '-c:a',
+    'aac',
+    '-b:a',
+    '192k',
+    '-movflags',
+    '+faststart',
     '-shortest',
-    '-y', outPath,
+    '-y',
+    outPath,
   ]
   await new Promise((resolve) => {
     spawn('ffmpeg', muxArgs, { stdio: ['ignore', 'inherit', 'inherit'] }).on('close', resolve)
   })
 
   cleanup()
-  if (!argv.keepTemps) { try { rmSync(tmpDir, { recursive: true }) } catch { /* ignore */ } }
-  else { console.log(`Temp files: ${tmpDir}`) }
+  if (!argv.keepTemps) {
+    try {
+      rmSync(tmpDir, { recursive: true })
+    } catch {
+      /* ignore */
+    }
+  } else {
+    console.log(`Temp files: ${tmpDir}`)
+  }
 
   console.log(`Done: ${outPath}`)
   return outPath
 }
 
 async function cmdRender(argv) {
-  if (argv.listAudio) { await listAudioDevices(); return }
+  if (argv.listAudio) {
+    await listAudioDevices()
+    return
+  }
 
   // Resolve paths (file(s) or folder(s))
   const paths = argv.paths || []
@@ -779,7 +1128,10 @@ async function cmdRender(argv) {
     process.exit(1)
   }
   const files = collectFiles(paths.map(resolveLib), argv.recursive)
-  if (files.length === 0) { console.error('No MIDI files found.'); process.exit(1) }
+  if (files.length === 0) {
+    console.error('No MIDI files found.')
+    process.exit(1)
+  }
 
   const opts = await resolveRenderOpts(argv)
   const tag = argv.resolution ? `${opts.dims.w}x${opts.dims.h}` : argv.ratio.replace(':', 'x')
@@ -794,8 +1146,13 @@ async function cmdRender(argv) {
     console.log(`Album: ${files.length} tracks, ${totalDuration.toFixed(1)}s total`)
     const outPath = argv.output || join(process.cwd(), `album.${tag}.mp4`)
     await renderSession({
-      playlist: files, singleMode: false, totalDuration, outPath,
-      label: `${files.length} tracks (album)`, argv, opts,
+      playlist: files,
+      singleMode: false,
+      totalDuration,
+      outPath,
+      label: `${files.length} tracks (album)`,
+      argv,
+      opts,
     })
     process.exit(0)
   }
@@ -806,8 +1163,13 @@ async function cmdRender(argv) {
     const totalDuration = midi.duration + argv.tail
     const outPath = argv.output || join(process.cwd(), `${basename(files[0], extname(files[0]))}.${tag}.mp4`)
     await renderSession({
-      playlist: [files[0]], singleMode: true, totalDuration, outPath,
-      label: basename(files[0]), argv, opts,
+      playlist: [files[0]],
+      singleMode: true,
+      totalDuration,
+      outPath,
+      label: basename(files[0]),
+      argv,
+      opts,
     })
     process.exit(0)
   }
@@ -821,8 +1183,13 @@ async function cmdRender(argv) {
       const totalDuration = midi.duration + argv.tail
       const outPath = join(process.cwd(), `${basename(files[i], extname(files[i]))}.${tag}.mp4`)
       await renderSession({
-        playlist: [files[i]], singleMode: true, totalDuration, outPath,
-        label: basename(files[i]), argv, opts,
+        playlist: [files[i]],
+        singleMode: true,
+        totalDuration,
+        outPath,
+        label: basename(files[i]),
+        argv,
+        opts,
       })
     } catch (e) {
       console.error(`  Error: ${e.message}`)
@@ -839,61 +1206,119 @@ yargs(hideBin(process.argv))
   .usage('$0 <command> [options]')
   .option('port', { type: 'string', describe: 'output port name substring (default: OPL3Duo)' })
   .command('list', 'list MIDI output ports', () => {}, cmdList)
-  .command('note <note>', 'play a single note', (y) => y
-    .positional('note', { type: 'number', describe: 'MIDI note (60 = middle C)' })
-    .option('vel', { type: 'number', default: 100 })
-    .option('dur', { type: 'number', default: 0.5, describe: 'seconds' })
-    .option('ch', { type: 'number', default: 1, describe: 'MIDI channel 1-16' }), cmdNote)
-  .command('chord <notes..>', 'play notes together', (y) => y
-    .positional('notes', { type: 'number' })
-    .option('vel', { type: 'number', default: 100 })
-    .option('dur', { type: 'number', default: 1 })
-    .option('ch', { type: 'number', default: 1 }), cmdChord)
-  .command('scale', 'play a major scale', (y) => y
-    .option('root', { type: 'number', default: 60 })
-    .option('vel', { type: 'number', default: 100 })
-    .option('dur', { type: 'number', default: 0.25 })
-    .option('ch', { type: 'number', default: 1 }), cmdScale)
-  .command('pc <program>', 'program change (GM patch 0-127)', (y) => y
-    .positional('program', { type: 'number' })
-    .option('ch', { type: 'number', default: 1 }), cmdPc)
-  .command('cc <number> <value>', 'send a control change', (y) => y
-    .positional('number', { type: 'number', describe: 'CC number 0-127' })
-    .positional('value', { type: 'number', describe: 'value 0-127' })
-    .option('ch', { type: 'number', default: 1 }), cmdCc)
+  .command(
+    'note <note>',
+    'play a single note',
+    (y) =>
+      y
+        .positional('note', { type: 'number', describe: 'MIDI note (60 = middle C)' })
+        .option('vel', { type: 'number', default: 100 })
+        .option('dur', { type: 'number', default: 0.5, describe: 'seconds' })
+        .option('ch', { type: 'number', default: 1, describe: 'MIDI channel 1-16' }),
+    cmdNote,
+  )
+  .command(
+    'chord <notes..>',
+    'play notes together',
+    (y) =>
+      y
+        .positional('notes', { type: 'number' })
+        .option('vel', { type: 'number', default: 100 })
+        .option('dur', { type: 'number', default: 1 })
+        .option('ch', { type: 'number', default: 1 }),
+    cmdChord,
+  )
+  .command(
+    'scale',
+    'play a major scale',
+    (y) =>
+      y
+        .option('root', { type: 'number', default: 60 })
+        .option('vel', { type: 'number', default: 100 })
+        .option('dur', { type: 'number', default: 0.25 })
+        .option('ch', { type: 'number', default: 1 }),
+    cmdScale,
+  )
+  .command(
+    'pc <program>',
+    'program change (GM patch 0-127)',
+    (y) => y.positional('program', { type: 'number' }).option('ch', { type: 'number', default: 1 }),
+    cmdPc,
+  )
+  .command(
+    'cc <number> <value>',
+    'send a control change',
+    (y) =>
+      y
+        .positional('number', { type: 'number', describe: 'CC number 0-127' })
+        .positional('value', { type: 'number', describe: 'value 0-127' })
+        .option('ch', { type: 'number', default: 1 }),
+    cmdCc,
+  )
   .command('panic', 'silence all stuck notes', () => {}, cmdPanic)
-  .command('play <paths..>', 'play .mid file(s) or folder(s)', (y) => y
-    .positional('paths', { type: 'string' })
-    .option('recursive', { alias: 'r', type: 'boolean', default: false })
-    .option('shuffle', { type: 'boolean', default: false })
-    .option('loop', { type: 'boolean', default: false })
-    .option('ch', { type: 'number', describe: 'force all events onto this channel 1-16' }), cmdPlay)
-  .command('serve [folder]', 'web player + visualizer; pick any MIDI output device', (y) => y
-    .positional('folder', { type: 'string', describe: 'folder of .mid files (default: current dir)' })
-    .option('recursive', { alias: 'r', type: 'boolean', default: false })
-    .option('http', { type: 'number', default: 7373, describe: 'HTTP port for the web UI' })
-    .option('theme', { type: 'string', describe: 'web theme: green (default) or winamp' })
-    .option('title', { type: 'string', describe: 'app title shown in the UI (default "OPL · MIDI PLAYER")' }), cmdServe)
-  .command('render [paths..]', 'render MIDI file(s) or folder to video (headless)', (y) => y
-    .positional('paths', { type: 'string', describe: '.mid file(s) or folder(s)' })
-    .option('recursive', { alias: 'r', type: 'boolean', default: false, describe: 'recurse into subfolders' })
-    .option('album', { type: 'boolean', default: false, describe: 'render all tracks as one continuous video' })
-    .option('audio-device', { type: 'string', describe: 'audio input device name (use --list-audio to see)' })
-    .option('audio-channels', { type: 'string', describe: 'capture only these two 1-based input channels as stereo, e.g. "7,8"' })
-    .option('audio-rate', { type: 'number', describe: 'audio sample rate (default 48000; match your interface, e.g. 44100)' })
-    .option('output', { alias: 'o', type: 'string', describe: 'output video file (.mp4)' })
-    .option('ratio', { type: 'string', default: '16:9', choices: ['16:9', '9:16', '1:1', '4:5'], describe: 'aspect ratio preset' })
-    .option('resolution', { type: 'string', describe: 'custom resolution WxH (overrides --ratio)' })
-    .option('art', { type: 'string', describe: 'path to album art image' })
-    .option('tail', { type: 'number', default: 3, describe: 'seconds of tail after last note (default: 3)' })
-    .option('device', { type: 'string', describe: 'MIDI output device name substring' })
-    .option('port', { type: 'number', describe: 'HTTP port for internal server (default: random)' })
-    .option('fps', { type: 'number', default: 30, describe: 'output video framerate' })
-    .option('keep-temps', { type: 'boolean', default: false, describe: 'keep temp files (video.webm, audio.wav)' })
-    .option('list-audio', { type: 'boolean', default: false, describe: 'list audio input devices and exit' })
-    .option('theme', { type: 'string', describe: 'visualizer theme: green (default) or winamp' })
-    .option('title', { type: 'string', describe: 'app title shown in the visualizer (default "OPL · MIDI PLAYER")' })
-  , cmdRender)
+  .command(
+    'play <paths..>',
+    'play .mid file(s) or folder(s)',
+    (y) =>
+      y
+        .positional('paths', { type: 'string' })
+        .option('recursive', { alias: 'r', type: 'boolean', default: false })
+        .option('shuffle', { type: 'boolean', default: false })
+        .option('loop', { type: 'boolean', default: false })
+        .option('ch', { type: 'number', describe: 'force all events onto this channel 1-16' }),
+    cmdPlay,
+  )
+  .command(
+    'serve [folder]',
+    'web player + visualizer; pick any MIDI output device',
+    (y) =>
+      y
+        .positional('folder', { type: 'string', describe: 'folder of .mid files (default: current dir)' })
+        .option('recursive', { alias: 'r', type: 'boolean', default: false })
+        .option('http', { type: 'number', default: 7373, describe: 'HTTP port for the web UI' })
+        .option('theme', { type: 'string', describe: 'web theme: green (default) or winamp' })
+        .option('title', { type: 'string', describe: 'app title shown in the UI (default "OPL · MIDI PLAYER")' }),
+    cmdServe,
+  )
+  .command(
+    'render [paths..]',
+    'render MIDI file(s) or folder to video (headless)',
+    (y) =>
+      y
+        .positional('paths', { type: 'string', describe: '.mid file(s) or folder(s)' })
+        .option('recursive', { alias: 'r', type: 'boolean', default: false, describe: 'recurse into subfolders' })
+        .option('album', { type: 'boolean', default: false, describe: 'render all tracks as one continuous video' })
+        .option('audio-device', { type: 'string', describe: 'audio input device name (use --list-audio to see)' })
+        .option('audio-channels', {
+          type: 'string',
+          describe: 'capture only these two 1-based input channels as stereo, e.g. "7,8"',
+        })
+        .option('audio-rate', {
+          type: 'number',
+          describe: 'audio sample rate (default 48000; match your interface, e.g. 44100)',
+        })
+        .option('output', { alias: 'o', type: 'string', describe: 'output video file (.mp4)' })
+        .option('ratio', {
+          type: 'string',
+          default: '16:9',
+          choices: ['16:9', '9:16', '1:1', '4:5'],
+          describe: 'aspect ratio preset',
+        })
+        .option('resolution', { type: 'string', describe: 'custom resolution WxH (overrides --ratio)' })
+        .option('art', { type: 'string', describe: 'path to album art image' })
+        .option('tail', { type: 'number', default: 3, describe: 'seconds of tail after last note (default: 3)' })
+        .option('device', { type: 'string', describe: 'MIDI output device name substring' })
+        .option('port', { type: 'number', describe: 'HTTP port for internal server (default: random)' })
+        .option('fps', { type: 'number', default: 30, describe: 'output video framerate' })
+        .option('keep-temps', { type: 'boolean', default: false, describe: 'keep temp files (video.webm, audio.wav)' })
+        .option('list-audio', { type: 'boolean', default: false, describe: 'list audio input devices and exit' })
+        .option('theme', { type: 'string', describe: 'visualizer theme: green (default) or winamp' })
+        .option('title', {
+          type: 'string',
+          describe: 'app title shown in the visualizer (default "OPL · MIDI PLAYER")',
+        }),
+    cmdRender,
+  )
   .demandCommand(1, 'Pick a command (try --help).')
   .strict()
   .help()
