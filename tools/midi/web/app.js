@@ -72,6 +72,19 @@ const fmt = (s) => {
   s = Math.max(0, s | 0)
   return `${(s / 60) | 0}:${String(s % 60).padStart(2, '0')}`
 }
+
+function syncScrollTitle(el) {
+  if (!el) return
+  el.classList.remove('scroll')
+  el.style.removeProperty('--scroll-dist')
+  requestAnimationFrame(() => {
+    if (el.scrollWidth > el.clientWidth + 1) {
+      el.style.setProperty('--scroll-dist', `${el.clientWidth - el.scrollWidth}px`)
+      el.classList.add('scroll')
+    }
+  })
+}
+
 function updatePos(t, d) {
   els.tCur.textContent = fmt(t)
   els.tDur.textContent = fmt(d)
@@ -108,7 +121,9 @@ function renderState(s) {
   }
   ;[...els.list.children].forEach((li, i) => li.classList.toggle('cur', i === s.index))
   const cur = s.playlist[s.index]
-  els.npName.textContent = cur ? cur.name.replace(/\.midi?$/i, '') : '—'
+  const name = cur ? cur.name.replace(/\.midi?$/i, '') : '—'
+  els.npName.textContent = name
+  syncScrollTitle(els.npName)
   els.npFolder.textContent = cur ? cur.folder : '—'
   if (!s.playing) els.tDur.textContent = fmt(s.duration)
   const curLi = els.list.children[s.index]

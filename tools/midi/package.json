@@ -7,7 +7,8 @@
     "opl": "./opl.mjs"
   },
   "scripts": {
-    "test": "playwright test",
+    "test": "npm run test:unit && playwright test",
+    "test:unit": "node --test tests/*.test.mjs",
     "test:audio": "node tests/audio-capture.test.mjs",
     "test:render": "playwright test render"
   },
