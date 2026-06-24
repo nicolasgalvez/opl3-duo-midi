@@ -18,8 +18,11 @@
  * During `play` in a terminal:  n = next   p = prev   space = pause   q = quit
  */
 import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync } from 'node:fs'
-import { basename, extname, join, dirname, isAbsolute } from 'node:path'
+import { basename, extname, join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { loadEnv, resolveLib, MIDI_TOOL_DIR } from './lib/paths.mjs'
+import { resolveLayout } from './lib/layout.mjs'
+import { resolveDimensions } from './lib/presets.mjs'
 import { EventEmitter } from 'node:events'
 import http from 'node:http'
 import net from 'node:net'
@@ -30,39 +33,12 @@ import easymidi from 'easymidi'
 import toneMidiPkg from '@tonejs/midi'
 import audify from 'audify'
 import yargs from 'yargs'
+import { hideBin } from 'yargs/helpers'
 
 const { Midi } = toneMidiPkg
 const { RtAudio, RtAudioFormat } = audify
 
-// Load tools/midi/.env (e.g. MIDI_LIBRARY) if present.
-try {
-  process.loadEnvFile(join(dirname(fileURLToPath(import.meta.url)), '.env'))
-} catch {
-  /* no .env file */
-}
-
-// Resolve a path; for a relative path not found in cwd, fall back to MIDI_LIBRARY.
-function resolveLib(p) {
-  if (isAbsolute(p)) return p
-  try {
-    statSync(p)
-    return p
-  } catch {
-    /* not relative to cwd */
-  }
-  const base = process.env.MIDI_LIBRARY
-  if (base) {
-    const alt = join(base, p)
-    try {
-      statSync(alt)
-      return alt
-    } catch {
-      /* not in library */
-    }
-  }
-  return p
-}
-import { hideBin } from 'yargs/helpers'
+loadEnv()
 
 const DEFAULT_PORT_MATCH = 'OPL3Duo'
 const MIDI_EXTS = ['.mid', '.midi']
@@ -544,6 +520,7 @@ class Engine {
     this.single = false
     this.artPath = null
     this.theme = 'green'
+    this.layout = 'normal'
     this.title = 'OPL · MIDI PLAYER'
     this.timer = setInterval(() => this.tick(), 5)
   }
@@ -694,7 +671,7 @@ function contentType(f) {
 }
 
 function createServer(engine, port) {
-  const webDir = join(dirname(fileURLToPath(import.meta.url)), 'web')
+  const webDir = join(MIDI_TOOL_DIR, 'web')
   const server = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://localhost')
     if (u.pathname === '/events') {
@@ -758,12 +735,13 @@ function createServer(engine, port) {
       return
     }
     if (file.endsWith('.html')) {
-      // Inject the selected theme (data-theme drives CSS with no flash) and the
-      // configurable app title (replaces the {{TITLE}} placeholder in the pages).
+      const layout = engine.layout || 'normal'
+      const theme = engine.theme || 'green'
+      const title = engine.title || 'OPL · MIDI PLAYER'
       data = Buffer.from(
         String(data)
-          .replace('<html lang="en">', `<html lang="en" data-theme="${engine.theme || 'green'}">`)
-          .replaceAll('{{TITLE}}', escapeHtml(engine.title || 'OPL · MIDI PLAYER')),
+          .replace('<html lang="en">', `<html lang="en" data-theme="${theme}" data-layout="${layout}">`)
+          .replaceAll('{{TITLE}}', escapeHtml(title)),
       )
     }
     res.writeHead(200, { 'Content-Type': contentType(file) })
@@ -777,6 +755,12 @@ function cmdServe(argv) {
   const engine = new Engine()
   engine.theme = argv.theme || process.env.OPL_THEME || 'green'
   engine.title = argv.title || process.env.OPL_TITLE || engine.title
+  try {
+    engine.layout = resolveLayout(argv)
+  } catch (e) {
+    console.error(e.message)
+    process.exit(1)
+  }
   const folder = resolveLib(argv.folder || process.cwd())
   const files = collectFiles([folder], argv.recursive)
   engine.setPlaylist(files)
@@ -800,13 +784,6 @@ function cmdServe(argv) {
 //  Plays a MIDI file, records audio from a system input device, captures the
 //  web visualizer via headless Playwright, and muxes into an MP4 video.
 // --------------------------------------------------------------------------
-
-const RATIOS = {
-  '16:9': { w: 1280, h: 720 },
-  '9:16': { w: 720, h: 1280 },
-  '1:1': { w: 1080, h: 1080 },
-  '4:5': { w: 1080, h: 1350 },
-}
 
 function getFreePort() {
   return new Promise((resolve) => {
@@ -902,15 +879,11 @@ async function listAudioDevices() {
 // Resolve shared render options once (used across all render modes)
 async function resolveRenderOpts(argv) {
   let dims
-  if (argv.resolution) {
-    const parts = argv.resolution.split('x').map(Number)
-    if (parts.length !== 2 || !parts[0] || !parts[1]) {
-      console.error('Invalid --resolution. Use WxH, e.g. 1280x720.')
-      process.exit(1)
-    }
-    dims = { w: parts[0], h: parts[1] }
-  } else {
-    dims = RATIOS[argv.ratio] || RATIOS['16:9']
+  try {
+    dims = resolveDimensions(argv)
+  } catch (e) {
+    console.error(e.message)
+    process.exit(1)
   }
 
   const audioDevice = argv.audioDevice || process.env.OPL_AUDIO_DEVICE
@@ -952,6 +925,12 @@ async function renderSession({ playlist, singleMode, totalDuration, outPath, lab
   engine.single = singleMode
   engine.theme = argv.theme || process.env.OPL_THEME || 'green'
   engine.title = argv.title || process.env.OPL_TITLE || engine.title
+  try {
+    engine.layout = resolveLayout(argv)
+  } catch (e) {
+    console.error(e.message)
+    process.exit(1)
+  }
   engine.setPlaylist(playlist)
   if (argv.art) {
     if (argv.art.startsWith('http')) {
@@ -1134,7 +1113,8 @@ async function cmdRender(argv) {
   }
 
   const opts = await resolveRenderOpts(argv)
-  const tag = argv.resolution ? `${opts.dims.w}x${opts.dims.h}` : argv.ratio.replace(':', 'x')
+  const tag =
+    argv.resolution || (argv.platform && argv.aspect) ? `${opts.dims.w}x${opts.dims.h}` : argv.ratio.replace(':', 'x')
 
   // --- Album mode: all tracks as one continuous video ---
   if (argv.album && files.length > 1) {
@@ -1277,7 +1257,12 @@ yargs(hideBin(process.argv))
         .option('recursive', { alias: 'r', type: 'boolean', default: false })
         .option('http', { type: 'number', default: 7373, describe: 'HTTP port for the web UI' })
         .option('theme', { type: 'string', describe: 'web theme: green (default) or winamp' })
-        .option('title', { type: 'string', describe: 'app title shown in the UI (default "OPL · MIDI PLAYER")' }),
+        .option('title', { type: 'string', describe: 'app title shown in the UI (default "OPL · MIDI PLAYER")' })
+        .option('layout', {
+          type: 'string',
+          choices: ['normal', 'minimized', 'overlay'],
+          describe: 'display layout: normal, minimized (hide playlist, large title), or overlay (OBS transparent)',
+        }),
     cmdServe,
   )
   .command(
@@ -1302,9 +1287,22 @@ yargs(hideBin(process.argv))
           type: 'string',
           default: '16:9',
           choices: ['16:9', '9:16', '1:1', '4:5'],
-          describe: 'aspect ratio preset',
+          describe: 'aspect ratio preset (ignored when --platform/--aspect or --resolution is set)',
         })
-        .option('resolution', { type: 'string', describe: 'custom resolution WxH (overrides --ratio)' })
+        .option('platform', {
+          type: 'string',
+          choices: ['youtube', 'instagram'],
+          describe: 'social video platform preset (use with --aspect)',
+        })
+        .option('aspect', {
+          type: 'string',
+          choices: ['landscape', 'portrait', 'square', 'story'],
+          describe: 'platform aspect: youtube landscape/portrait; instagram square/portrait/story',
+        })
+        .option('resolution', {
+          type: 'string',
+          describe: 'custom resolution WxH (overrides --platform/--aspect and --ratio)',
+        })
         .option('art', { type: 'string', describe: 'path to album art image' })
         .option('tail', { type: 'number', default: 3, describe: 'seconds of tail after last note (default: 3)' })
         .option('device', { type: 'string', describe: 'MIDI output device name substring' })
@@ -1316,6 +1314,11 @@ yargs(hideBin(process.argv))
         .option('title', {
           type: 'string',
           describe: 'app title shown in the visualizer (default "OPL · MIDI PLAYER")',
+        })
+        .option('layout', {
+          type: 'string',
+          choices: ['normal', 'minimized', 'overlay'],
+          describe: 'display layout: normal, minimized (hide playlist, large title), or overlay (OBS transparent)',
         }),
     cmdRender,
   )

@@ -166,6 +166,81 @@
     display: block;
     image-rendering: pixelated;
   }
+
+  /* ── Minimized render layout ── */
+  [data-layout="minimized"] .header,
+  [data-layout="minimized"] #folder-name { display: none; }
+  [data-layout="minimized"] #track-name {
+    font-size: clamp(22px, 4vw, 48px);
+    max-width: 92vw;
+    white-space: nowrap;
+    overflow: hidden;
+    display: inline-block;
+  }
+  [data-layout="minimized"] #track-name.scroll {
+    animation: title-scroll 12s ease-in-out infinite alternate;
+  }
+  [data-layout="minimized"] .render-page.no-art .eq-container { flex: 1 1 auto; }
+
+  /* ── Overlay render layout (OBS) ── */
+  [data-layout="overlay"] html,
+  [data-layout="overlay"] body { background: transparent !important; }
+  [data-layout="overlay"] .scanlines,
+  [data-layout="overlay"] .vignette,
+  [data-layout="overlay"] .header,
+  [data-layout="overlay"] .art-container,
+  [data-layout="overlay"] #folder-name,
+  [data-layout="overlay"] .eq-wrap::before { display: none !important; }
+  [data-layout="overlay"] .render-page {
+    position: relative;
+    height: 100vh;
+    padding: 0;
+    gap: 0;
+  }
+  [data-layout="overlay"] .track-info {
+    position: fixed;
+    bottom: 16px;
+    left: 16px;
+    right: 136px;
+    text-align: left;
+    z-index: 2;
+  }
+  [data-layout="overlay"] #track-name {
+    font-size: clamp(18px, 2.8vw, 32px);
+    color: #141414;
+    -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.95);
+    paint-order: stroke fill;
+    text-shadow: 0 0 8px rgba(255,255,255,0.85), 0 2px 6px rgba(0,0,0,0.45);
+    max-width: none;
+    white-space: nowrap;
+    overflow: hidden;
+    display: inline-block;
+  }
+  [data-layout="overlay"] #track-name.scroll {
+    animation: title-scroll 12s ease-in-out infinite alternate;
+  }
+  [data-layout="overlay"] .eq-container {
+    position: fixed;
+    bottom: 12px;
+    right: 12px;
+    width: 112px;
+    height: 112px;
+    z-index: 2;
+  }
+  [data-layout="overlay"] .eq-wrap {
+    width: 100%;
+    height: 100%;
+    border: none;
+    padding: 4px;
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 4px;
+  }
+  [data-layout="overlay"] #eq { width: 100%; height: 100%; }
+
+  @keyframes title-scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(var(--scroll-dist, 0)); }
+  }
 </style>
 </head>
 <body>
@@ -257,6 +332,18 @@ function resetChannels() {
   }
 }
 
+function syncScrollTitle(el) {
+  if (!el) return
+  el.classList.remove('scroll')
+  el.style.removeProperty('--scroll-dist')
+  requestAnimationFrame(() => {
+    if (el.scrollWidth > el.clientWidth + 1) {
+      el.style.setProperty('--scroll-dist', `${el.clientWidth - el.scrollWidth}px`)
+      el.classList.add('scroll')
+    }
+  })
+}
+
 function renderState(s) {
   const cur = s.playlist && s.playlist[s.index]
   if (cur) {
@@ -264,6 +351,7 @@ function renderState(s) {
     if (els.trackName.dataset.name !== name) {
       els.trackName.textContent = name
       els.trackName.dataset.name = name
+      syncScrollTitle(els.trackName)
     }
     els.folderName.textContent = cur.folder || ''
   }
