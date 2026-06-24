@@ -110,6 +110,10 @@ opl render song.mid --platform instagram --aspect story
 # Minimized layout for cleaner videos
 opl render song.mid --layout minimized --platform youtube --aspect landscape
 
+# Render via OBS (video from OBS, audio still captured cleanly via RtAudio)
+opl render song.mid --obs --obs-source "OPL Visualizer"
+# Set OPL_OBS_URL, OPL_OBS_PASSWORD, OPL_OBS_SOURCE in .env as needed
+
 # With album art and custom output
 opl render song.mid --art cover.png -o video.mp4
 
@@ -147,6 +151,10 @@ Options:
 | `--platform`            | —                       | `youtube` or `instagram` (use with `--aspect`)         |
 | `--aspect`              | —                       | `landscape`, `portrait`, `square`, `story`             |
 | `--layout`              | `normal`                | `normal`, `minimized`, or `overlay`                    |
+| `--obs`                 | off                     | Capture video from OBS WebSocket instead of Playwright |
+| `--obs-source`          | `OPL_OBS_SOURCE`        | OBS browser source name to auto-point at visualizer    |
+| `--obs-url`             | `ws://127.0.0.1:4455`   | OBS WebSocket URL (`OPL_OBS_URL`)                      |
+| `--obs-password`        | `OPL_OBS_PASSWORD`      | OBS WebSocket password                                 |
 | `--resolution WxH`      | _(from ratio/platform)_ | Custom resolution (overrides presets)                  |
 | `-o, --output <path>`   | auto                    | Output `.mp4` file path                                |
 | `--art <path>`          | _(none)_                | Album art image to overlay                             |
