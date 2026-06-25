@@ -8,15 +8,19 @@ import Playlist from './components/Playlist'
 import NowPlaying from './components/NowPlaying'
 import DevicePicker from './components/DevicePicker'
 import FileDialogs from './components/FileDialogs'
+import Library from './components/Library'
+import { fetchLibrary } from './lib/libraryApi'
 
 export default function App() {
   const theme = useStore((s) => s.theme)
   const layout = useStore((s) => s.layout)
   const showPlaylist = useStore((s) => s.showPlaylist)
   const showEqualizer = useStore((s) => s.showEqualizer)
+  const showLibrary = useStore((s) => s.showLibrary)
   const setPlayer = useStore((s) => s.setPlayer)
   const rememberPlayback = useStore((s) => s.rememberPlayback)
   const setLive = useStore((s) => s.setLive)
+  const setLibrary = useStore((s) => s.setLibrary)
 
   // Persisted theme/layout drive the <html> data-attributes the CSS keys off.
   useEffect(() => {
@@ -40,6 +44,11 @@ export default function App() {
       }
     })
   }, [setPlayer, rememberPlayback, setLive])
+
+  // Load the media library once on mount.
+  useEffect(() => {
+    fetchLibrary('').then(setLibrary)
+  }, [setLibrary])
 
   // Capture the latest position on unload for restore-on-reload.
   useEffect(() => {
@@ -71,6 +80,7 @@ export default function App() {
             <Playlist />
           </aside>
         )}
+        {showLibrary && <Library />}
       </main>
       <FileDialogs />
     </div>

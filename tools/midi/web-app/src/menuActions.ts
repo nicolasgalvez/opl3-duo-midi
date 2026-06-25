@@ -35,6 +35,9 @@ export function dispatchMenuAction(id: MenuActionId): void {
     case 'view.toggleEqualizer':
       s.toggleEqualizer()
       break
+    case 'view.toggleLibrary':
+      s.toggleLibrary()
+      break
     case 'view.fullscreen':
       if (typeof document !== 'undefined') {
         if (document.fullscreenElement) void document.exitFullscreen?.()

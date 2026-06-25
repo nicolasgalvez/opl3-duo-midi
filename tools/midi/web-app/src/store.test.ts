@@ -14,9 +14,11 @@ describe('store', () => {
       layout: 'normal',
       showPlaylist: true,
       showEqualizer: true,
+      showLibrary: false,
       lastIndex: 0,
       lastPosition: 0,
       player: null,
+      library: [],
       livePosition: 0,
       liveDuration: 0,
     })
@@ -45,6 +47,18 @@ describe('store', () => {
     useStore.getState().rememberPlayback(3, 12.5)
     expect(persisted().lastIndex).toBe(3)
     expect(persisted().lastPosition).toBe(12.5)
+  })
+
+  it('toggleLibrary flips and persists; setLibrary updates in memory only', () => {
+    useStore.getState().toggleLibrary()
+    expect(useStore.getState().showLibrary).toBe(true)
+    expect(persisted().showLibrary).toBe(true)
+
+    useStore.getState().setLibrary([
+      { id: 1, path: '/m/a.mid', name: 'a.mid', folder: 'm', addedAt: 1, tags: [] },
+    ])
+    expect(useStore.getState().library).toHaveLength(1)
+    expect('library' in persisted()).toBe(false)
   })
 
   it('setLive updates the live position/duration without persisting them', () => {
