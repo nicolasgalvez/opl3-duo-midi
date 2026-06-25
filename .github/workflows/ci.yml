@@ -45,6 +45,17 @@ jobs:
         working-directory: tools/midi
         run: npx playwright install --with-deps chromium
 
+      # Diagnostic: surface why `opl serve` may fail to boot on the runner.
+      - name: Smoke - opl serve
+        working-directory: tools/midi
+        continue-on-error: true
+        run: |
+          node opl.mjs serve ./tests/fixtures --http 7399 > /tmp/serve.log 2>&1 &
+          sleep 8
+          echo "--- HTTP ---"; curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:7399/ || echo "curl failed"
+          echo "--- serve.log ---"; cat /tmp/serve.log || true
+          kill %1 2>/dev/null || true
+
       # Exclude the in-browser SoundFont synthesis tests: they assert real audio
       # output (AnalyserNode RMS), which CI runners have no audio backend for.
       - name: E2E (Playwright, deterministic)
