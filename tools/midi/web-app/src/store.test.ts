@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useStore, PERSIST_KEY } from './store'
 import type { PlayerState } from './lib/types'
+import { DEFAULT_CONFIG } from './lib/config'
 
 function persisted(): Record<string, unknown> {
   return JSON.parse(localStorage.getItem(PERSIST_KEY) || '{}').state ?? {}
@@ -20,6 +21,7 @@ describe('store', () => {
       lastPosition: 0,
       player: null,
       library: [],
+      config: DEFAULT_CONFIG,
       livePosition: 0,
       liveDuration: 0,
     })
@@ -60,6 +62,17 @@ describe('store', () => {
     ])
     expect(useStore.getState().library).toHaveLength(1)
     expect('library' in persisted()).toBe(false)
+  })
+
+  it('setConfig updates the runtime config but does not persist it (server-driven)', () => {
+    const playerOnly = {
+      ...DEFAULT_CONFIG,
+      output: 'soundfont' as const,
+      features: { ...DEFAULT_CONFIG.features, menu: false, library: false, edit: false },
+    }
+    useStore.getState().setConfig(playerOnly)
+    expect(useStore.getState().config.features.menu).toBe(false)
+    expect('config' in persisted()).toBe(false)
   })
 
   it('setOutputMode switches and persists the output mode', () => {
