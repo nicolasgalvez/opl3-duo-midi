@@ -53,7 +53,7 @@ The USB type is set to MIDI via `-D USB_MIDI_SERIAL` in `platformio.ini`.
 A small Node tool (in `tools/midi/`) for testing and playback over MIDI.
 
 ```bash
-cd tools/midi && npm install && npm link   # makes `opl` global
+npm install && npm link   # from repo root — makes `opl` global
 opl list                                   # list MIDI outputs
 opl note 60                                # middle C
 opl pc 24                                  # program change (GM patch)
@@ -61,6 +61,8 @@ opl cc 10 0                                # any control change (here: pan left)
 opl play song.mid                          # play a Standard MIDI File
 opl play "/path/to/folder" -r --loop       # play a folder; n/p/space/q to control
 opl serve "<folder>" -r                    # web visualizer (below)
+opl serve "<folder>" -r --layout minimized # hide playlist, large scrolling title
+opl serve "<folder>" -r --layout overlay   # transparent OBS overlay
 opl render song.mid                        # headless video render (below)
 opl panic                                  # silence stuck notes
 ```
@@ -71,7 +73,12 @@ opl panic                                  # silence stuck notes
 opl serve "<folder>" -r            # serve a folder of .mid files (recursive)
 # then open http://localhost:7373
 opl serve "<folder>" -r --http 8080   # use a different port
+opl serve "<folder>" -r --layout minimized   # video-friendly: no playlist, large title
+opl serve "<folder>" -r --layout overlay     # OBS browser source (transparent bg)
+opl serve "<folder>" -r --repeat --shuffle   # loop playlist, random order
 ```
+
+Set `OPL_LAYOUT=minimized|overlay` in `.env` (repo root or `tools/midi/.env`).
 
 An ANSI/CRT-themed page with a 16-channel velocity **equalizer**, playlist, now-playing
 (track + folder), and transport. Pick the MIDI **output device** in the page (top-right) and
@@ -94,7 +101,23 @@ opl render song.mid
 opl render song.mid --audio-device "BlackHole 2ch"
 
 # Vertical (Shorts/Reels/TikTok)
-opl render song.mid --ratio 9:16
+opl render song.mid --platform youtube --aspect portrait
+opl render song.mid --ratio 9:16   # legacy preset
+
+# Instagram
+opl render song.mid --platform instagram --aspect square
+opl render song.mid --platform instagram --aspect story
+
+# Minimized layout for cleaner videos
+opl render song.mid --layout minimized --platform youtube --aspect landscape
+
+# Render via OBS (video from OBS, audio still captured cleanly via RtAudio)
+opl render song.mid --obs --obs-source "OPL Visualizer"
+# Set OPL_OBS_URL, OPL_OBS_PASSWORD, OPL_OBS_SOURCE in .env as needed
+
+# If video leads audio (common with OBS), tweak sync at mux time:
+opl render song.mid --obs --av-offset 200    # delay audio 200ms
+opl render song.mid --av-offset -100         # delay video 100ms (any render mode)
 
 # With album art and custom output
 opl render song.mid --art cover.png -o video.mp4
@@ -112,20 +135,40 @@ opl render "folder/" --album -o doom-soundtrack.mp4
 opl render song.mid --ratio 1:1
 ```
 
+Platform presets (use `--platform` with `--aspect`; override with `--resolution`):
+
+| Platform    | Aspect      | Resolution         |
+| ----------- | ----------- | ------------------ |
+| `youtube`   | `landscape` | 1920×1080          |
+| `youtube`   | `portrait`  | 1080×1920 (Shorts) |
+| `instagram` | `square`    | 1080×1080          |
+| `instagram` | `portrait`  | 1080×1350 (feed)   |
+| `instagram` | `story`     | 1080×1920 (Reels)  |
+
+Set `OPL_PLATFORM` / `OPL_ASPECT` / `OPL_LAYOUT` in `.env`.
+
 Options:
 
-| Flag | Default | Description |
-|---|---|---|
-| `--audio-device <name>` | `OPL_AUDIO_DEVICE` env | Audio input device (BlackHole 2ch, default, hw:1,0, …) |
-| `--ratio <preset>` | `16:9` | Aspect ratio: `16:9`, `9:16`, `1:1`, `4:5` |
-| `--resolution WxH` | *(from ratio)* | Custom resolution (overrides `--ratio`) |
-| `-o, --output <path>` | auto | Output `.mp4` file path |
-| `--art <path>` | *(none)* | Album art image to overlay |
-| `--tail <seconds>` | `3` | Recording tail after last MIDI note |
-| `--fps <n>` | `30` | Output video framerate |
-| `--device <name>` | `OPL_MIDI_DEVICE` env | MIDI output device substring (auto-detects if unset) |
-| `--keep-temps` | off | Keep intermediate WebM/WAV files |
-| `--list-audio` | — | List audio devices and exit |
+| Flag                    | Default                 | Description                                            |
+| ----------------------- | ----------------------- | ------------------------------------------------------ |
+| `--audio-device <name>` | `OPL_AUDIO_DEVICE` env  | Audio input device (BlackHole 2ch, default, hw:1,0, …) |
+| `--ratio <preset>`      | `16:9`                  | Legacy aspect ratio: `16:9`, `9:16`, `1:1`, `4:5`      |
+| `--platform`            | —                       | `youtube` or `instagram` (use with `--aspect`)         |
+| `--aspect`              | —                       | `landscape`, `portrait`, `square`, `story`             |
+| `--layout`              | `normal`                | `normal`, `minimized`, or `overlay`                    |
+| `--obs`                 | off                     | Capture video from OBS WebSocket instead of Playwright |
+| `--obs-source`          | `OPL_OBS_SOURCE`        | OBS browser source name to auto-point at visualizer    |
+| `--obs-url`             | `ws://127.0.0.1:4455`   | OBS WebSocket URL (`OPL_OBS_URL`)                      |
+| `--obs-password`        | `OPL_OBS_PASSWORD`      | OBS WebSocket password                                 |
+| `--av-offset <ms>`      | `OPL_AV_OFFSET`         | Sync tweak at mux: + delays audio, − delays video      |
+| `--resolution WxH`      | _(from ratio/platform)_ | Custom resolution (overrides presets)                  |
+| `-o, --output <path>`   | auto                    | Output `.mp4` file path                                |
+| `--art <path>`          | _(none)_                | Album art image to overlay                             |
+| `--tail <seconds>`      | `3`                     | Recording tail after last MIDI note                    |
+| `--fps <n>`             | `30`                    | Output video framerate                                 |
+| `--device <name>`       | `OPL_MIDI_DEVICE` env   | MIDI output device substring (auto-detects if unset)   |
+| `--keep-temps`          | off                     | Keep intermediate WebM/WAV files                       |
+| `--list-audio`          | —                       | List audio devices and exit                            |
 
 **How it works:** The command starts an internal web server with the visualizer,
 launches a headless Chromium browser (Playwright), records audio via `ffmpeg` from

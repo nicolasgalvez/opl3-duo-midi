@@ -8,7 +8,7 @@ test('renders the player shell', async ({ page }) => {
   await expect(page).toHaveTitle(/OPL/)
   await expect(page.locator('#eq')).toBeVisible()
   await expect(page.locator('#device')).toBeVisible()
-  for (const act of ['prev', 'play', 'pause', 'stop', 'next']) {
+  for (const act of ['prev', 'play', 'pause', 'stop', 'next', 'shuffle', 'repeat']) {
     await expect(page.locator(`.transport button[data-act="${act}"]`)).toBeVisible()
   }
 })
@@ -38,4 +38,25 @@ test('transport buttons post commands to the server', async ({ page }) => {
   await page.locator('.transport button[data-act="play"]').click()
   await page.locator('.transport button[data-act="next"]').click()
   await expect.poll(() => posted).toEqual(['play', 'next'])
+})
+
+test('repeat and shuffle toggles post to the server', async ({ page }) => {
+  const posted = []
+  await page.route('**/api', async (route) => {
+    posted.push(JSON.parse(route.request().postData() || '{}'))
+    await route.fulfill({ status: 200, body: 'ok' })
+  })
+  await page.locator('#btn-repeat').click()
+  await page.locator('#btn-shuffle').click()
+  await expect
+    .poll(() => posted)
+    .toEqual([
+      { action: 'repeat', on: true },
+      { action: 'shuffle', on: true },
+    ])
+})
+
+test('repeat and shuffle reflect server state', async ({ page }) => {
+  await expect(page.locator('#btn-repeat')).not.toHaveClass(/on/)
+  await expect(page.locator('#btn-shuffle')).not.toHaveClass(/on/)
 })

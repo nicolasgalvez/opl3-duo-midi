@@ -18,8 +18,21 @@
  * During `play` in a terminal:  n = next   p = prev   space = pause   q = quit
  */
 import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync } from 'node:fs'
-import { basename, extname, join, dirname, isAbsolute } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { basename, extname, join, dirname } from 'node:path'
+import { loadEnv, resolveLib, MIDI_TOOL_DIR } from './lib/paths.mjs'
+import { resolveLayout } from './lib/layout.mjs'
+import { resolveDimensions } from './lib/presets.mjs'
+import {
+  connectObs,
+  resolveObsOpts,
+  setBrowserSourceUrl,
+  startObsRecording,
+  stopObsRecording,
+  waitForFile,
+  waitForObsRecording,
+} from './lib/obs.mjs'
+import { buildMuxArgs, resolveAvOffset } from './lib/mux.mjs'
+import { nextPlaylistIndex, prevPlaylistIndex, shuffleOrder } from './lib/playback.mjs'
 import { EventEmitter } from 'node:events'
 import http from 'node:http'
 import net from 'node:net'
@@ -30,39 +43,12 @@ import easymidi from 'easymidi'
 import toneMidiPkg from '@tonejs/midi'
 import audify from 'audify'
 import yargs from 'yargs'
+import { hideBin } from 'yargs/helpers'
 
 const { Midi } = toneMidiPkg
 const { RtAudio, RtAudioFormat } = audify
 
-// Load tools/midi/.env (e.g. MIDI_LIBRARY) if present.
-try {
-  process.loadEnvFile(join(dirname(fileURLToPath(import.meta.url)), '.env'))
-} catch {
-  /* no .env file */
-}
-
-// Resolve a path; for a relative path not found in cwd, fall back to MIDI_LIBRARY.
-function resolveLib(p) {
-  if (isAbsolute(p)) return p
-  try {
-    statSync(p)
-    return p
-  } catch {
-    /* not relative to cwd */
-  }
-  const base = process.env.MIDI_LIBRARY
-  if (base) {
-    const alt = join(base, p)
-    try {
-      statSync(alt)
-      return alt
-    } catch {
-      /* not in library */
-    }
-  }
-  return p
-}
-import { hideBin } from 'yargs/helpers'
+loadEnv()
 
 const DEFAULT_PORT_MATCH = 'OPL3Duo'
 const MIDI_EXTS = ['.mid', '.midi']
@@ -542,14 +528,30 @@ class Engine {
     this.lastPos = 0
     this.clients = new Set()
     this.single = false
+    this.repeat = false
+    this.shuffle = false
+    this._shuffleOrder = []
     this.artPath = null
     this.theme = 'green'
+    this.layout = 'normal'
     this.title = 'OPL · MIDI PLAYER'
     this.timer = setInterval(() => this.tick(), 5)
   }
 
   setPlaylist(files) {
     this.playlist = files.map((f) => ({ path: f, name: basename(f), folder: basename(dirname(f)) }))
+    this._shuffleOrder = this.shuffle ? shuffleOrder(this.playlist.length) : []
+  }
+
+  setRepeat(on) {
+    this.repeat = !!on
+    this.broadcastState()
+  }
+
+  setShuffle(on) {
+    this.shuffle = !!on
+    this._shuffleOrder = this.shuffle ? shuffleOrder(this.playlist.length) : []
+    this.broadcastState()
   }
 
   selectDevice(name) {
@@ -616,11 +618,29 @@ class Engine {
       this.stop()
       return
     }
-    this.load((this.index + 1) % this.playlist.length)
+    const idx = nextPlaylistIndex({
+      index: this.index,
+      length: this.playlist.length,
+      repeat: this.repeat,
+      shuffle: this.shuffle,
+      order: this._shuffleOrder,
+    })
+    if (idx == null) {
+      this.stop()
+      return
+    }
+    this.load(idx)
     this.play()
   }
   prev() {
-    this.load(this.index > 0 ? this.index - 1 : 0)
+    if (this.playlist.length === 0) return
+    const idx = prevPlaylistIndex({
+      index: this.index,
+      length: this.playlist.length,
+      shuffle: this.shuffle,
+      order: this._shuffleOrder,
+    })
+    this.load(idx)
     this.play()
   }
 
@@ -658,6 +678,8 @@ class Engine {
       playlist: this.playlist.map((p, i) => ({ i, name: p.name, folder: p.folder })),
       index: this.index,
       playing: this.playing,
+      repeat: this.repeat,
+      shuffle: this.shuffle,
       duration: this.duration,
       position: this.elapsed,
     }
@@ -694,7 +716,7 @@ function contentType(f) {
 }
 
 function createServer(engine, port) {
-  const webDir = join(dirname(fileURLToPath(import.meta.url)), 'web')
+  const webDir = join(MIDI_TOOL_DIR, 'web')
   const server = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://localhost')
     if (u.pathname === '/events') {
@@ -725,6 +747,8 @@ function createServer(engine, port) {
           next: () => engine.next(),
           prev: () => engine.prev(),
           stop: () => engine.stop(),
+          repeat: () => engine.setRepeat(m.on != null ? !!m.on : !engine.repeat),
+          shuffle: () => engine.setShuffle(m.on != null ? !!m.on : !engine.shuffle),
         }
         if (fns[m.action]) fns[m.action]()
         res.writeHead(200)
@@ -758,12 +782,13 @@ function createServer(engine, port) {
       return
     }
     if (file.endsWith('.html')) {
-      // Inject the selected theme (data-theme drives CSS with no flash) and the
-      // configurable app title (replaces the {{TITLE}} placeholder in the pages).
+      const layout = engine.layout || 'normal'
+      const theme = engine.theme || 'green'
+      const title = engine.title || 'OPL · MIDI PLAYER'
       data = Buffer.from(
         String(data)
-          .replace('<html lang="en">', `<html lang="en" data-theme="${engine.theme || 'green'}">`)
-          .replaceAll('{{TITLE}}', escapeHtml(engine.title || 'OPL · MIDI PLAYER')),
+          .replace('<html lang="en">', `<html lang="en" data-theme="${theme}" data-layout="${layout}">`)
+          .replaceAll('{{TITLE}}', escapeHtml(title)),
       )
     }
     res.writeHead(200, { 'Content-Type': contentType(file) })
@@ -777,9 +802,17 @@ function cmdServe(argv) {
   const engine = new Engine()
   engine.theme = argv.theme || process.env.OPL_THEME || 'green'
   engine.title = argv.title || process.env.OPL_TITLE || engine.title
+  try {
+    engine.layout = resolveLayout(argv)
+  } catch (e) {
+    console.error(e.message)
+    process.exit(1)
+  }
   const folder = resolveLib(argv.folder || process.cwd())
   const files = collectFiles([folder], argv.recursive)
   engine.setPlaylist(files)
+  engine.repeat = !!(argv.repeat || argv.loop || process.env.OPL_REPEAT === '1' || process.env.OPL_REPEAT === 'true')
+  engine.setShuffle(!!(argv.shuffle || process.env.OPL_SHUFFLE === '1' || process.env.OPL_SHUFFLE === 'true'))
   const outs = easymidi.getOutputs()
   if (outs.length) engine.selectDevice(outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0])
   if (files.length) engine.load(0)
@@ -800,13 +833,6 @@ function cmdServe(argv) {
 //  Plays a MIDI file, records audio from a system input device, captures the
 //  web visualizer via headless Playwright, and muxes into an MP4 video.
 // --------------------------------------------------------------------------
-
-const RATIOS = {
-  '16:9': { w: 1280, h: 720 },
-  '9:16': { w: 720, h: 1280 },
-  '1:1': { w: 1080, h: 1080 },
-  '4:5': { w: 1080, h: 1350 },
-}
 
 function getFreePort() {
   return new Promise((resolve) => {
@@ -902,15 +928,11 @@ async function listAudioDevices() {
 // Resolve shared render options once (used across all render modes)
 async function resolveRenderOpts(argv) {
   let dims
-  if (argv.resolution) {
-    const parts = argv.resolution.split('x').map(Number)
-    if (parts.length !== 2 || !parts[0] || !parts[1]) {
-      console.error('Invalid --resolution. Use WxH, e.g. 1280x720.')
-      process.exit(1)
-    }
-    dims = { w: parts[0], h: parts[1] }
-  } else {
-    dims = RATIOS[argv.ratio] || RATIOS['16:9']
+  try {
+    dims = resolveDimensions(argv)
+  } catch (e) {
+    console.error(e.message)
+    process.exit(1)
   }
 
   const audioDevice = argv.audioDevice || process.env.OPL_AUDIO_DEVICE
@@ -931,27 +953,69 @@ async function resolveRenderOpts(argv) {
     ? outs.find((n) => n === midiMatch) || outs.find((n) => n.toLowerCase().includes(midiMatch.toLowerCase()))
     : outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0]
 
-  let chromium
-  try {
-    const pw = await import('playwright')
-    chromium = pw.chromium
-  } catch {
-    console.error('Playwright is required for `opl render`. Install it:')
-    console.error('  cd tools/midi && npm install playwright && npx playwright install chromium')
-    process.exit(1)
+  let chromium = null
+  if (!argv.obs) {
+    try {
+      const pw = await import('playwright')
+      chromium = pw.chromium
+    } catch {
+      console.error('Playwright is required for `opl render`. Install it:')
+      console.error('  npm install && npx playwright install chromium')
+      process.exit(1)
+    }
   }
 
-  return { dims, audioDevice, audioChannels, audioRate, devName, chromium }
+  const obsOpts = argv.obs ? resolveObsOpts(argv) : null
+
+  return { dims, audioDevice, audioChannels, audioRate, devName, chromium, obsOpts }
 }
 
-// One full render pipeline: engine + server + headless browser + ffmpeg audio + mux.
-async function renderSession({ playlist, singleMode, totalDuration, outPath, label, argv, opts }) {
-  const { dims, audioDevice, audioChannels, audioRate, devName, chromium } = opts
+function createRenderCleanup(engine, server) {
+  let cleaned = false
+  return () => {
+    if (cleaned) return
+    cleaned = true
+    try {
+      clearInterval(engine.timer)
+    } catch {
+      /* ignore */
+    }
+    try {
+      engine.allNotesOff()
+    } catch {
+      /* ignore */
+    }
+    try {
+      if (engine.out) {
+        engine.out.close()
+        engine.out = null
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      server.close()
+    } catch {
+      /* ignore */
+    }
+  }
+}
 
+async function setupRenderEngine({ playlist, singleMode, argv, devName, port }) {
   const engine = new Engine()
   engine.single = singleMode
+  engine.repeat = false
+  engine.shuffle = false
   engine.theme = argv.theme || process.env.OPL_THEME || 'green'
   engine.title = argv.title || process.env.OPL_TITLE || engine.title
+  const layoutArgv = { ...argv }
+  if (argv.obs && !argv.layout && !process.env.OPL_LAYOUT) layoutArgv.layout = 'overlay'
+  try {
+    engine.layout = resolveLayout(layoutArgv)
+  } catch (e) {
+    console.error(e.message)
+    process.exit(1)
+  }
   engine.setPlaylist(playlist)
   if (argv.art) {
     if (argv.art.startsWith('http')) {
@@ -969,41 +1033,177 @@ async function renderSession({ playlist, singleMode, totalDuration, outPath, lab
   if (devName) engine.selectDevice(devName)
   engine.load(0)
 
-  const port = await getFreePort()
-  const server = createServer(engine, port)
+  const httpPort = port ?? (argv.port || (await getFreePort()))
+  const server = createServer(engine, httpPort)
+  return { engine, server, httpPort }
+}
+
+async function muxVideoAudio({ videoFile, audioFile, outPath, fps, avOffsetMs = 0 }) {
+  const muxArgs = buildMuxArgs({ videoFile, audioFile, outPath, fps, avOffsetMs })
+  await new Promise((resolve, reject) => {
+    spawn('ffmpeg', muxArgs, { stdio: ['ignore', 'inherit', 'inherit'] }).on('close', (code) => {
+      if (code === 0) resolve()
+      else reject(new Error(`ffmpeg exited with code ${code}`))
+    })
+  })
+}
+
+// One full render pipeline: engine + server + OBS recording + ffmpeg audio + mux.
+async function renderSessionObs({ playlist, singleMode, totalDuration, outPath, label, argv, opts }) {
+  const { dims, audioDevice, audioChannels, audioRate, devName, obsOpts } = opts
+
+  const { engine, server, httpPort } = await setupRenderEngine({ playlist, singleMode, argv, devName })
+  const cleanup = createRenderCleanup(engine, server)
   const tmpDir = mkdtempSync(join(os.tmpdir(), 'opl-render-'))
   const audioFile = join(tmpDir, 'audio.wav')
+  const pageUrl = `http://localhost:${httpPort}/render.html`
 
-  let cleaned = false
-  const cleanup = () => {
-    if (cleaned) return
-    cleaned = true
-    try {
-      clearInterval(engine.timer)
-    } catch {
-      /* ignore */
-    }
-    try {
-      engine.allNotesOff()
-    } catch {
-      /* ignore */
-    }
-    // Closing the MIDI port releases the CoreMIDI handle that keeps the
-    // libuv event loop alive — without this the process hangs after "Done:".
-    try {
-      if (engine.out) {
-        engine.out.close()
-        engine.out = null
-      }
-    } catch {
-      /* ignore */
-    }
-    try {
-      server.close()
-    } catch {
-      /* ignore */
-    }
+  let obsConn
+  try {
+    obsConn = await connectObs(obsOpts)
+  } catch (e) {
+    console.error(e.message)
+    cleanup()
+    process.exit(1)
   }
+  const { obs, info } = obsConn
+
+  console.log(`\nRendering (OBS): ${label}  (${totalDuration.toFixed(1)}s)`)
+  console.log(
+    `Resolution: ${dims.w}x${dims.h}  Audio: ${audioDevice}${audioChannels ? ` ch${audioChannels}` : ''} @ ${audioRate}Hz  MIDI: ${devName}`,
+  )
+  console.log(`OBS: ${info.obsWebSocketVersion || 'connected'} @ ${obsOpts.url}`)
+  console.log(`Visualizer: ${pageUrl}`)
+
+  if (obsOpts.source) {
+    try {
+      await setBrowserSourceUrl(obs, obsOpts.source, pageUrl, dims.w, dims.h)
+      console.log(`Browser source "${obsOpts.source}" pointed at visualizer.`)
+    } catch (e) {
+      console.error(`Could not update browser source "${obsOpts.source}": ${e.message}`)
+      cleanup()
+      try {
+        await obs.disconnect()
+      } catch {
+        /* ignore */
+      }
+      process.exit(1)
+    }
+  } else {
+    console.log('Tip: pass --obs-source "Your Browser Source Name" to auto-set the URL.')
+  }
+
+  // Give the browser source time to load the page and receive SSE state.
+  await sleep(obsOpts.source ? 2000 : 1500)
+
+  const recDur = totalDuration + 0.5
+  let cap
+  try {
+    cap = startAudioCapture({ device: audioDevice, channels: audioChannels, rate: audioRate, outFile: audioFile })
+  } catch (e) {
+    console.error(e.message)
+    cleanup()
+    try {
+      await obs.disconnect()
+    } catch {
+      /* ignore */
+    }
+    process.exit(1)
+  }
+
+  try {
+    await startObsRecording(obs)
+    await waitForObsRecording(obs)
+  } catch (e) {
+    console.error(e.message)
+    cap.stop()
+    cleanup()
+    try {
+      await obs.disconnect()
+    } catch {
+      /* ignore */
+    }
+    process.exit(1)
+  }
+
+  await sleep(300)
+  engine.play()
+  await sleep(recDur * 1000)
+  engine.stop()
+  const frames = cap.stop()
+  console.log(`Capture complete (${(frames / audioRate).toFixed(1)}s audio). Stopping OBS...`)
+
+  let videoFile
+  try {
+    videoFile = await stopObsRecording(obs)
+    await waitForFile(videoFile)
+  } catch (e) {
+    console.error(e.message)
+    cleanup()
+    try {
+      await obs.disconnect()
+    } catch {
+      /* ignore */
+    }
+    process.exit(1)
+  }
+
+  try {
+    await obs.disconnect()
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    statSync(audioFile)
+  } catch {
+    console.error('Audio recording failed: no audio file written.')
+    cleanup()
+    process.exit(1)
+  }
+
+  console.log(`OBS video: ${videoFile}`)
+  const avOffsetMs = resolveAvOffset(argv)
+  if (avOffsetMs) {
+    const hint = avOffsetMs > 0 ? 'audio delayed relative to video' : 'video delayed relative to audio'
+    console.log(`A/V offset: ${avOffsetMs > 0 ? '+' : ''}${avOffsetMs}ms (${hint})`)
+  }
+  console.log('Encoding final video...')
+  try {
+    await muxVideoAudio({ videoFile, audioFile, outPath, fps: argv.fps, avOffsetMs })
+  } catch (e) {
+    console.error(e.message)
+    cleanup()
+    process.exit(1)
+  }
+
+  cleanup()
+  if (!argv.keepTemps) {
+    try {
+      rmSync(tmpDir, { recursive: true })
+    } catch {
+      /* ignore */
+    }
+  } else {
+    console.log(`Temp files: ${tmpDir}`)
+  }
+
+  console.log(`Done: ${outPath}`)
+  return outPath
+}
+
+// One full render pipeline: engine + server + headless browser + ffmpeg audio + mux.
+async function renderSession({ playlist, singleMode, totalDuration, outPath, label, argv, opts }) {
+  if (argv.obs) {
+    return renderSessionObs({ playlist, singleMode, totalDuration, outPath, label, argv, opts })
+  }
+
+  const { dims, audioDevice, audioChannels, audioRate, devName, chromium } = opts
+
+  const { engine, server, httpPort } = await setupRenderEngine({ playlist, singleMode, argv, devName })
+  const cleanup = createRenderCleanup(engine, server)
+  const tmpDir = mkdtempSync(join(os.tmpdir(), 'opl-render-'))
+  const audioFile = join(tmpDir, 'audio.wav')
 
   console.log(`\nRendering: ${label}  (${totalDuration.toFixed(1)}s)`)
   console.log(
@@ -1017,7 +1217,7 @@ async function renderSession({ playlist, singleMode, totalDuration, outPath, lab
   })
   const page = await context.newPage()
 
-  await page.goto(`http://localhost:${port}/render.html`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`http://localhost:${httpPort}/render.html`, { waitUntil: 'domcontentloaded' })
   await page
     .waitForFunction(
       () => {
@@ -1067,38 +1267,18 @@ async function renderSession({ playlist, singleMode, totalDuration, outPath, lab
   }
 
   console.log('Encoding final video...')
-  const muxArgs = [
-    '-i',
-    videoFile,
-    '-i',
-    audioFile,
-    '-c:v',
-    'libx264',
-    '-preset',
-    'medium',
-    '-crf',
-    '18',
-    '-pix_fmt',
-    'yuv420p',
-    // -r AFTER the inputs is an output option: ffmpeg keeps the webm's real
-    // (variable-rate) timestamps and resamples to constant fps, preserving
-    // duration. Before -i it would force-reinterpret the VFR webm as Nfps and
-    // compress the timeline (~20% fast). -shortest trims to the audio length.
-    '-r',
-    String(argv.fps),
-    '-c:a',
-    'aac',
-    '-b:a',
-    '192k',
-    '-movflags',
-    '+faststart',
-    '-shortest',
-    '-y',
-    outPath,
-  ]
-  await new Promise((resolve) => {
-    spawn('ffmpeg', muxArgs, { stdio: ['ignore', 'inherit', 'inherit'] }).on('close', resolve)
-  })
+  const avOffsetMs = resolveAvOffset(argv)
+  if (avOffsetMs) {
+    const hint = avOffsetMs > 0 ? 'audio delayed relative to video' : 'video delayed relative to audio'
+    console.log(`A/V offset: ${avOffsetMs > 0 ? '+' : ''}${avOffsetMs}ms (${hint})`)
+  }
+  try {
+    await muxVideoAudio({ videoFile, audioFile, outPath, fps: argv.fps, avOffsetMs })
+  } catch (e) {
+    console.error(e.message)
+    cleanup()
+    process.exit(1)
+  }
 
   cleanup()
   if (!argv.keepTemps) {
@@ -1134,7 +1314,8 @@ async function cmdRender(argv) {
   }
 
   const opts = await resolveRenderOpts(argv)
-  const tag = argv.resolution ? `${opts.dims.w}x${opts.dims.h}` : argv.ratio.replace(':', 'x')
+  const tag =
+    argv.resolution || (argv.platform && argv.aspect) ? `${opts.dims.w}x${opts.dims.h}` : argv.ratio.replace(':', 'x')
 
   // --- Album mode: all tracks as one continuous video ---
   if (argv.album && files.length > 1) {
@@ -1277,7 +1458,19 @@ yargs(hideBin(process.argv))
         .option('recursive', { alias: 'r', type: 'boolean', default: false })
         .option('http', { type: 'number', default: 7373, describe: 'HTTP port for the web UI' })
         .option('theme', { type: 'string', describe: 'web theme: green (default) or winamp' })
-        .option('title', { type: 'string', describe: 'app title shown in the UI (default "OPL · MIDI PLAYER")' }),
+        .option('title', { type: 'string', describe: 'app title shown in the UI (default "OPL · MIDI PLAYER")' })
+        .option('layout', {
+          type: 'string',
+          choices: ['normal', 'minimized', 'overlay'],
+          describe: 'display layout: normal, minimized (hide playlist, large title), or overlay (OBS transparent)',
+        })
+        .option('repeat', {
+          alias: 'loop',
+          type: 'boolean',
+          default: false,
+          describe: 'loop playlist when a track ends',
+        })
+        .option('shuffle', { type: 'boolean', default: false, describe: 'shuffle play order' }),
     cmdServe,
   )
   .command(
@@ -1302,9 +1495,22 @@ yargs(hideBin(process.argv))
           type: 'string',
           default: '16:9',
           choices: ['16:9', '9:16', '1:1', '4:5'],
-          describe: 'aspect ratio preset',
+          describe: 'aspect ratio preset (ignored when --platform/--aspect or --resolution is set)',
         })
-        .option('resolution', { type: 'string', describe: 'custom resolution WxH (overrides --ratio)' })
+        .option('platform', {
+          type: 'string',
+          choices: ['youtube', 'instagram'],
+          describe: 'social video platform preset (use with --aspect)',
+        })
+        .option('aspect', {
+          type: 'string',
+          choices: ['landscape', 'portrait', 'square', 'story'],
+          describe: 'platform aspect: youtube landscape/portrait; instagram square/portrait/story',
+        })
+        .option('resolution', {
+          type: 'string',
+          describe: 'custom resolution WxH (overrides --platform/--aspect and --ratio)',
+        })
         .option('art', { type: 'string', describe: 'path to album art image' })
         .option('tail', { type: 'number', default: 3, describe: 'seconds of tail after last note (default: 3)' })
         .option('device', { type: 'string', describe: 'MIDI output device name substring' })
@@ -1316,6 +1522,32 @@ yargs(hideBin(process.argv))
         .option('title', {
           type: 'string',
           describe: 'app title shown in the visualizer (default "OPL · MIDI PLAYER")',
+        })
+        .option('layout', {
+          type: 'string',
+          choices: ['normal', 'minimized', 'overlay'],
+          describe: 'display layout: normal, minimized (hide playlist, large title), or overlay (OBS transparent)',
+        })
+        .option('obs', {
+          type: 'boolean',
+          default: false,
+          describe: 'capture video from a running OBS session (WebSocket) instead of headless Playwright',
+        })
+        .option('obs-url', {
+          type: 'string',
+          describe: 'OBS WebSocket URL (default ws://127.0.0.1:4455, or OPL_OBS_URL in .env)',
+        })
+        .option('obs-password', {
+          type: 'string',
+          describe: 'OBS WebSocket password (or OPL_OBS_PASSWORD in .env)',
+        })
+        .option('obs-source', {
+          type: 'string',
+          describe: 'OBS browser source name to point at the visualizer (or OPL_OBS_SOURCE in .env)',
+        })
+        .option('av-offset', {
+          type: 'number',
+          describe: 'A/V sync tweak in ms at mux (+ delays audio, − delays video; or OPL_AV_OFFSET)',
         }),
     cmdRender,
   )

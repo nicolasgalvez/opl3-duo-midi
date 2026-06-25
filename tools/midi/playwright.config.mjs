@@ -14,7 +14,7 @@ export default defineConfig({
   },
   // Boot `opl serve` against the bundled fixture folder for the test run.
   webServer: {
-    command: `node opl.mjs serve ./tests/fixtures --http ${PORT}`,
+    command: `node opl.mjs serve ./tests/fixtures --http ${PORT} --title "OPL · MIDI PLAYER"`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 20000,

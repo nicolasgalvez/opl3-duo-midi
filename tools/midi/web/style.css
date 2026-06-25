@@ -178,3 +178,86 @@ button {
 button:hover { background: var(--green-faint); }
 button:active { background: var(--green); color: #000; text-shadow: none; }
 button.go { border-color: var(--green); color: var(--amber); }
+button.toggle { min-width: 4.5em; }
+button.toggle.on { background: var(--green); color: #000; text-shadow: none; border-color: var(--green); }
+[data-theme="winamp"] button.toggle.on { color: #000; }
+
+/* ── Minimized layout: hide playlist, large scrolling title ── */
+[data-layout="minimized"] .playlist { display: none; }
+[data-layout="minimized"] main { grid-template-columns: 1fr; }
+[data-layout="minimized"] .np-line:first-child { font-size: clamp(20px, 3.2vw, 36px); }
+[data-layout="minimized"] #np-name {
+  display: inline-block;
+  max-width: min(100%, 90vw);
+  overflow: hidden;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+[data-layout="minimized"] #np-name.scroll {
+  animation: title-scroll 12s ease-in-out infinite alternate;
+}
+@keyframes title-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(var(--scroll-dist, 0)); }
+}
+
+/* ── Overlay layout: transparent OBS browser source ── */
+[data-layout="overlay"] html,
+[data-layout="overlay"] body { background: transparent !important; text-shadow: none; }
+[data-layout="overlay"] .scanlines,
+[data-layout="overlay"] .topbar,
+[data-layout="overlay"] .playlist,
+[data-layout="overlay"] .transport,
+[data-layout="overlay"] .time,
+[data-layout="overlay"] .panel-title,
+[data-layout="overlay"] .devsel,
+[data-layout="overlay"] .np-line:has(#np-folder),
+[data-layout="overlay"] .lbl { display: none !important; }
+[data-layout="overlay"] .crt {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  position: relative;
+  gap: 0;
+}
+[data-layout="overlay"] main {
+  display: block;
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  width: auto;
+  flex: none;
+  min-height: 0;
+  z-index: 2;
+}
+[data-layout="overlay"] .panel.viz {
+  border: none;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  width: 112px;
+  height: 112px;
+  border-radius: 4px;
+}
+[data-layout="overlay"] #eq { width: 104px; height: 104px; min-height: 0; }
+[data-layout="overlay"] .nowplaying {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  right: 136px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  z-index: 2;
+}
+[data-layout="overlay"] #np-name {
+  font-size: clamp(18px, 2.8vw, 32px);
+  font-weight: bold;
+  color: #141414;
+  -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.95);
+  paint-order: stroke fill;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.85), 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+[data-layout="overlay"] #np-name.scroll {
+  animation: title-scroll 12s ease-in-out infinite alternate;
+}
