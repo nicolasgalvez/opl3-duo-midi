@@ -7,6 +7,7 @@ import Transport from './components/Transport'
 import Playlist from './components/Playlist'
 import NowPlaying from './components/NowPlaying'
 import DevicePicker from './components/DevicePicker'
+import OutputPicker from './components/OutputPicker'
 import FileDialogs from './components/FileDialogs'
 import Library from './components/Library'
 import { fetchLibrary } from './lib/libraryApi'
@@ -64,7 +65,10 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <MenuBar />
-        <DevicePicker />
+        <div className="outputs">
+          <OutputPicker />
+          <DevicePicker />
+        </div>
       </header>
       <main className="content">
         {showEqualizer && (

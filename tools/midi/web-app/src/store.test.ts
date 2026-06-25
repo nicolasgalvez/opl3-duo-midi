@@ -15,6 +15,7 @@ describe('store', () => {
       showPlaylist: true,
       showEqualizer: true,
       showLibrary: false,
+      outputMode: 'hardware',
       lastIndex: 0,
       lastPosition: 0,
       player: null,
@@ -59,6 +60,12 @@ describe('store', () => {
     ])
     expect(useStore.getState().library).toHaveLength(1)
     expect('library' in persisted()).toBe(false)
+  })
+
+  it('setOutputMode switches and persists the output mode', () => {
+    useStore.getState().setOutputMode('soundfont')
+    expect(useStore.getState().outputMode).toBe('soundfont')
+    expect(persisted().outputMode).toBe('soundfont')
   })
 
   it('setLive updates the live position/duration without persisting them', () => {
