@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { PlayerState, LibraryEntry } from './lib/types'
+import { DEFAULT_CONFIG, type AppConfig } from './lib/config'
 
 export type Theme = 'green' | 'winamp'
 export type Layout = 'normal' | 'minimized' | 'overlay'
@@ -21,6 +22,7 @@ export interface AppState {
   // ── live, non-persisted server state ──
   player: PlayerState | null
   library: LibraryEntry[]
+  config: AppConfig
   livePosition: number
   liveDuration: number
   dialog: DialogKind
@@ -32,6 +34,7 @@ export interface AppState {
   toggleLibrary: () => void
   setLibrary: (entries: LibraryEntry[]) => void
   setOutputMode: (m: OutputMode) => void
+  setConfig: (c: AppConfig) => void
   rememberPlayback: (index: number, position: number) => void
   setPlayer: (p: PlayerState) => void
   setLive: (position: number, duration: number) => void
@@ -53,6 +56,7 @@ export const useStore = create<AppState>()(
       lastPosition: 0,
       player: null,
       library: [],
+      config: DEFAULT_CONFIG,
       livePosition: 0,
       liveDuration: 0,
       dialog: null,
@@ -64,6 +68,7 @@ export const useStore = create<AppState>()(
       toggleLibrary: () => set((s) => ({ showLibrary: !s.showLibrary })),
       setLibrary: (library) => set({ library }),
       setOutputMode: (outputMode) => set({ outputMode }),
+      setConfig: (config) => set({ config }),
       rememberPlayback: (lastIndex, lastPosition) => set({ lastIndex, lastPosition }),
       setPlayer: (player) => set({ player }),
       setLive: (livePosition, liveDuration) => set({ livePosition, liveDuration }),

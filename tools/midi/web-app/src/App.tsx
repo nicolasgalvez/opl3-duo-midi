@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { connectEvents } from './lib/sse'
 import { useStore } from './store'
+import { fetchConfig } from './lib/config'
 import MenuBar from './components/MenuBar'
 import Equalizer from './components/Equalizer'
 import Transport from './components/Transport'
@@ -19,12 +20,29 @@ export default function App() {
   const showPlaylist = useStore((s) => s.showPlaylist)
   const showEqualizer = useStore((s) => s.showEqualizer)
   const showLibrary = useStore((s) => s.showLibrary)
+  const features = useStore((s) => s.config.features)
   const setPlayer = useStore((s) => s.setPlayer)
   const rememberPlayback = useStore((s) => s.rememberPlayback)
   const setLive = useStore((s) => s.setLive)
   const setLibrary = useStore((s) => s.setLibrary)
 
-  // Persisted theme/layout drive the <html> data-attributes the CSS keys off.
+  // Runtime config drives feature flags + defaults. For a restricted/embedded
+  // config (no menu) it also drives theme/layout/output; a locked output is
+  // always forced. The full local tool keeps the user's persisted prefs.
+  useEffect(() => {
+    fetchConfig().then((cfg) => {
+      const s = useStore.getState()
+      s.setConfig(cfg)
+      document.title = cfg.title
+      if (!cfg.features.menu) {
+        s.setTheme(cfg.theme)
+        s.setLayout(cfg.layout)
+        s.setOutputMode(cfg.output)
+      }
+      if (!cfg.features.outputPicker) s.setOutputMode(cfg.output)
+    })
+  }, [])
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
@@ -32,9 +50,6 @@ export default function App() {
     document.documentElement.dataset.layout = layout
   }, [layout])
 
-  // Live server state → store. Playback is server-side, so a page reload simply
-  // reconnects and reflects the server's current track + position. `pos` frames
-  // keep the displayed position advancing between state broadcasts.
   useEffect(() => {
     return connectEvents((e) => {
       if (e.type === 'state') {
@@ -47,12 +62,10 @@ export default function App() {
     })
   }, [setPlayer, rememberPlayback, setLive])
 
-  // Load the media library once on mount.
   useEffect(() => {
-    fetchLibrary('').then(setLibrary)
-  }, [setLibrary])
+    if (features.library) fetchLibrary('').then(setLibrary)
+  }, [features.library, setLibrary])
 
-  // Capture the latest position on unload for restore-on-reload.
   useEffect(() => {
     const save = () => {
       const p = useStore.getState().player
@@ -65,10 +78,10 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <MenuBar />
+        {features.menu ? <MenuBar /> : <div className="brand">{useStore.getState().config.title}</div>}
         <div className="outputs">
-          <OutputPicker />
-          <DevicePicker />
+          {features.outputPicker && <OutputPicker />}
+          {features.devicePicker && <DevicePicker />}
         </div>
       </header>
       <main className="content">
@@ -79,13 +92,13 @@ export default function App() {
             <Transport />
           </section>
         )}
-        {showPlaylist && (
+        {features.playlist && showPlaylist && (
           <aside className="panel playlist-panel">
             <div className="panel-title">PLAYLIST</div>
             <Playlist />
           </aside>
         )}
-        {showLibrary && <Library />}
+        {features.library && showLibrary && <Library />}
       </main>
       <SoundfontController />
       <FileDialogs />
