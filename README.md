@@ -120,6 +120,27 @@ opl serve "<folder>" -r --ui v2        # or set OPL_UI=v2
 The classic page remains the default; `--ui v2` opts in (and auto-builds the bundle on first
 run if its deps are installed). The headless renderer always uses the classic `render.html`.
 
+#### Config + feature flags (embeddable player)
+
+`opl serve` takes a JSON config (validated; invalid config is a clear fatal error) that sets
+defaults and toggles features — so the same app runs as the full tool or a stripped-down
+**player-only widget**. v2 is selected automatically when the config needs it.
+
+```bash
+opl serve "<folder>" -r --preset player-only   # SoundFont output, no menu/upload/edit
+opl serve "<folder>" -r --config ./opl.json    # custom config file (or OPL_CONFIG=...)
+```
+
+`opl.json` keys (all optional): `title`, `theme` (`green`/`winamp`), `layout`
+(`normal`/`minimized`/`overlay`), `output` (`hardware`/`soundfont`), and
+`features` (`menu`, `playlist`, `library`, `edit`, `devicePicker`, `outputPicker` booleans).
+A file may also set `"preset": "player-only"` and override individual keys. The SPA reads the
+config from `GET /api/config`. Embed the widget with an iframe pointing at the server:
+
+```html
+<iframe src="http://localhost:7373" width="480" height="320"></iframe>
+```
+
 **SoundFont output (v2):** the **Output** selector (top-right) switches between the hardware OPL3
 synth and an **in-browser SoundFont** engine ([spessasynth](https://github.com/spessasus/spessasynth_lib),
 WebAudio) — so the player makes sound with no hardware attached. A built-in default SoundFont

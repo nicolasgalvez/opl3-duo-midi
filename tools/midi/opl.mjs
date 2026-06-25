@@ -25,6 +25,7 @@ import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
 import { toM3U, toJSPF } from './lib/playlistWrite.mjs'
 import { removeTrack as removeTrackPure, moveTrack as moveTrackPure } from './lib/playlistEdit.mjs'
 import { openLibrary } from './lib/library.mjs'
+import { resolveConfig } from './lib/config.mjs'
 import { resolveLayout } from './lib/layout.mjs'
 import { resolveDimensions } from './lib/presets.mjs'
 import {
@@ -545,6 +546,7 @@ class Engine {
     this.artPath = null
     this.library = null
     this.uploadsDir = null
+    this.config = null
     this.theme = 'green'
     this.layout = 'normal'
     this.title = 'OPL · MIDI PLAYER'
@@ -835,6 +837,11 @@ function createServer(engine, port, { useSpa = false } = {}) {
       })
       return
     }
+    if (u.pathname === '/api/config' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(engine.config ?? {}))
+      return
+    }
     if (u.pathname === '/api/midi') {
       // Serve a track's raw MIDI bytes so the in-browser SoundFont sequencer
       // (ODM-5) can load and play it client-side.
@@ -971,9 +978,8 @@ function createServer(engine, port, { useSpa = false } = {}) {
 // Resolve the requested UI ('classic' default, 'v2' opt-in) and make sure the
 // SPA bundle exists. If v2 is requested but unbuilt, try a one-time build; on
 // failure, fall back to classic so `opl serve` always shows *something*.
-function ensureWebUi(argv) {
-  const ui = (argv.ui || process.env.OPL_UI || 'classic').toLowerCase()
-  if (ui !== 'v2') return false
+function ensureWebUi(wantV2) {
+  if (!wantV2) return false
   const appDir = join(MIDI_TOOL_DIR, 'web-app')
   if (existsSync(join(appDir, 'dist', 'index.html'))) return true
   if (!existsSync(join(appDir, 'node_modules'))) {
@@ -992,10 +998,19 @@ function ensureWebUi(argv) {
 
 async function cmdServe(argv) {
   const engine = new Engine()
-  engine.theme = argv.theme || process.env.OPL_THEME || 'green'
-  engine.title = argv.title || process.env.OPL_TITLE || engine.title
+
+  // Runtime config (defaults / preset / file). Invalid config is fatal.
   try {
-    engine.layout = resolveLayout(argv)
+    engine.config = resolveConfig({ preset: argv.preset, file: argv.config || process.env.OPL_CONFIG })
+  } catch (e) {
+    console.error('config error:', e.message)
+    process.exit(1)
+  }
+
+  engine.theme = argv.theme || process.env.OPL_THEME || engine.config.theme
+  engine.title = argv.title || process.env.OPL_TITLE || engine.config.title
+  try {
+    engine.layout = argv.layout || process.env.OPL_LAYOUT ? resolveLayout(argv) : engine.config.layout
   } catch (e) {
     console.error(e.message)
     process.exit(1)
@@ -1017,7 +1032,13 @@ async function cmdServe(argv) {
     console.error('library disabled:', e.message)
   }
 
-  const useSpa = ensureWebUi(argv)
+  // v2 is required for SoundFont output and any disabled feature (player-only).
+  const cfg = engine.config
+  const wantV2 =
+    (argv.ui || process.env.OPL_UI) === 'v2' ||
+    cfg.output === 'soundfont' ||
+    Object.values(cfg.features).some((v) => v === false)
+  const useSpa = ensureWebUi(wantV2)
   createServer(engine, argv.http, { useSpa })
   console.log(`opl web player:  http://localhost:${argv.http}  (UI: ${useSpa ? 'v2' : 'classic'})`)
   console.log(`folder: ${folder}  (${files.length} tracks)   device: ${engine.deviceName || 'none'}`)
@@ -1676,6 +1697,15 @@ yargs(hideBin(process.argv))
           type: 'string',
           choices: ['classic', 'v2'],
           describe: 'web UI: classic (default) or v2 (React SPA with File/Edit/View menu; or OPL_UI)',
+        })
+        .option('preset', {
+          type: 'string',
+          choices: ['full', 'player-only'],
+          describe: 'config preset; player-only = embeddable widget (SoundFont, no menu/upload/edit)',
+        })
+        .option('config', {
+          type: 'string',
+          describe: 'path to a JSON config file (feature flags + defaults; or a preset name; or OPL_CONFIG)',
         }),
     cmdServe,
   )
