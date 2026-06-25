@@ -16,6 +16,11 @@ jobs:
           node-version: 24
           cache: npm
 
+      # The CLI's native deps (audify/RtAudio, easymidi/@julusian/midi) link
+      # against ALSA, so `opl serve` (which the e2e boot) needs libasound present.
+      - name: Install ALSA (libasound)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
       # Root install also installs the tools/midi workspace (incl. native deps).
       - name: Install root + CLI deps
         run: npm ci
