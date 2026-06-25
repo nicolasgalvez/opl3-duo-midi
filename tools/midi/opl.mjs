@@ -192,7 +192,7 @@ const GM_NAMES = [
 
 // --------------------------------------------------------------------------
 function resolvePort(requested) {
-  const names = easymidi.getOutputs()
+  const names = midiOutputs()
   if (names.length === 0) {
     console.error('No MIDI output ports found. Is the Teensy plugged in and flashed?')
     process.exit(1)
@@ -227,7 +227,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 // --------------------------------------------------------------------------
 function cmdList() {
   console.log('MIDI outputs:')
-  for (const n of easymidi.getOutputs()) console.log('  -', n)
+  for (const n of midiOutputs()) console.log('  -', n)
 }
 
 async function cmdNote(argv) {
@@ -290,6 +290,17 @@ function cmdPanic(argv) {
 // --------------------------------------------------------------------------
 function arr(v) {
   return Array.isArray(v) ? v : v == null ? [] : [v]
+}
+
+// MIDI output enumeration that never throws: on a host with no MIDI subsystem
+// (e.g. a CI runner, or a headless box with no ALSA sequencer) easymidi throws,
+// which must not crash `opl serve` — the visualizer / SoundFont output still work.
+function midiOutputs() {
+  try {
+    return easymidi.getOutputs()
+  } catch {
+    return []
+  }
 }
 
 function collectFiles(paths, recursive) {
@@ -630,7 +641,7 @@ class Engine {
       }
       this.out = null
     }
-    const outs = easymidi.getOutputs()
+    const outs = midiOutputs()
     const found = outs.find((n) => n === name) || outs.find((n) => n.toLowerCase().includes((name || '').toLowerCase()))
     if (found) {
       this.out = new easymidi.Output(found)
@@ -739,7 +750,7 @@ class Engine {
   state() {
     return {
       type: 'state',
-      devices: easymidi.getOutputs(),
+      devices: midiOutputs(),
       device: this.deviceName,
       playlist: this.playlist.map((p, i) => ({ i, name: p.name, folder: p.folder })),
       index: this.index,
@@ -1024,7 +1035,7 @@ async function cmdServe(argv) {
   engine.setPlaylist(files)
   engine.repeat = !!(argv.repeat || argv.loop || process.env.OPL_REPEAT === '1' || process.env.OPL_REPEAT === 'true')
   engine.setShuffle(!!(argv.shuffle || process.env.OPL_SHUFFLE === '1' || process.env.OPL_SHUFFLE === 'true'))
-  const outs = easymidi.getOutputs()
+  const outs = midiOutputs()
   if (outs.length) engine.selectDevice(outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0])
   if (files.length) engine.load(0)
 
@@ -1166,7 +1177,7 @@ async function resolveRenderOpts(argv) {
   const audioChannels = argv.audioChannels || process.env.OPL_AUDIO_CHANNELS || null
   const audioRate = Number(argv.audioRate || process.env.OPL_AUDIO_RATE || 48000)
 
-  const outs = easymidi.getOutputs()
+  const outs = midiOutputs()
   if (outs.length === 0) {
     console.error('No MIDI output ports found.')
     process.exit(1)
