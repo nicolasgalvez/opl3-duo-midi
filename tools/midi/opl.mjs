@@ -25,7 +25,7 @@ import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
 import { toM3U, toJSPF } from './lib/playlistWrite.mjs'
 import { removeTrack as removeTrackPure, moveTrack as moveTrackPure } from './lib/playlistEdit.mjs'
 import { openLibrary } from './lib/library.mjs'
-import { resolveConfig } from './lib/config.mjs'
+import { resolveConfig, validateConfig } from './lib/config.mjs'
 import { resolveLayout } from './lib/layout.mjs'
 import { resolveDimensions } from './lib/presets.mjs'
 import {
@@ -999,22 +999,26 @@ function ensureWebUi(wantV2) {
 async function cmdServe(argv) {
   const engine = new Engine()
 
-  // Runtime config (defaults / preset / file). Invalid config is fatal.
+  // Runtime config (defaults / preset / file), then CLI/env overrides so both
+  // the classic page and the v2 SPA (/api/config) see --theme/--layout/--title.
+  // Invalid config is fatal.
   try {
-    engine.config = resolveConfig({ preset: argv.preset, file: argv.config || process.env.OPL_CONFIG })
+    const base = resolveConfig({ preset: argv.preset, file: argv.config || process.env.OPL_CONFIG })
+    const ov = {}
+    const theme = argv.theme || process.env.OPL_THEME
+    const layout = argv.layout || process.env.OPL_LAYOUT
+    const title = argv.title || process.env.OPL_TITLE
+    if (theme) ov.theme = theme
+    if (layout) ov.layout = layout
+    if (title) ov.title = title
+    engine.config = Object.keys(ov).length ? validateConfig({ ...base, ...ov }) : base
   } catch (e) {
     console.error('config error:', e.message)
     process.exit(1)
   }
-
-  engine.theme = argv.theme || process.env.OPL_THEME || engine.config.theme
-  engine.title = argv.title || process.env.OPL_TITLE || engine.config.title
-  try {
-    engine.layout = argv.layout || process.env.OPL_LAYOUT ? resolveLayout(argv) : engine.config.layout
-  } catch (e) {
-    console.error(e.message)
-    process.exit(1)
-  }
+  engine.theme = engine.config.theme
+  engine.title = engine.config.title
+  engine.layout = engine.config.layout
   const folder = resolveLib(argv.folder || process.cwd())
   const files = collectFiles([folder], argv.recursive)
   engine.setPlaylist(files)
@@ -1032,13 +1036,10 @@ async function cmdServe(argv) {
     console.error('library disabled:', e.message)
   }
 
-  // v2 is required for SoundFont output and any disabled feature (player-only).
-  const cfg = engine.config
-  const wantV2 =
-    (argv.ui || process.env.OPL_UI) === 'v2' ||
-    cfg.output === 'soundfont' ||
-    Object.values(cfg.features).some((v) => v === false)
-  const useSpa = ensureWebUi(wantV2)
+  // v2 (the React SPA) is now the default; `--ui classic` opts back to the
+  // legacy page. ensureWebUi falls back to classic if the SPA can't be built.
+  const ui = (argv.ui || process.env.OPL_UI || 'v2').toLowerCase()
+  const useSpa = ensureWebUi(ui !== 'classic')
   createServer(engine, argv.http, { useSpa })
   console.log(`opl web player:  http://localhost:${argv.http}  (UI: ${useSpa ? 'v2' : 'classic'})`)
   console.log(`folder: ${folder}  (${files.length} tracks)   device: ${engine.deviceName || 'none'}`)
@@ -1696,7 +1697,7 @@ yargs(hideBin(process.argv))
         .option('ui', {
           type: 'string',
           choices: ['classic', 'v2'],
-          describe: 'web UI: classic (default) or v2 (React SPA with File/Edit/View menu; or OPL_UI)',
+          describe: 'web UI: v2 React SPA (default) or classic legacy page (or OPL_UI)',
         })
         .option('preset', {
           type: 'string',

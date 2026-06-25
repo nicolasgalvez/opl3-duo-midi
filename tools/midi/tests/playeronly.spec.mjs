@@ -48,6 +48,8 @@ test('serves the validated player-only config', async () => {
 test('UI hides menu / output picker / device picker (embeddable widget)', async ({ browser }) => {
   const page = await browser.newPage(base)
   await page.goto('/')
+  // The preset's layout (minimized) is applied via config (no menu needed).
+  await expect(page.locator('html')).toHaveAttribute('data-layout', 'minimized')
   await expect(page.locator('.brand')).toBeVisible()
   await expect(page.getByRole('button', { name: 'File', exact: true })).toHaveCount(0)
   await expect(page.locator('.menubar')).toHaveCount(0)
