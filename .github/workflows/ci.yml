@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # The CLI's native deps (audify/RtAudio, easymidi/@julusian/midi) link
+      # against ALSA, so `opl serve` (which the e2e boot) needs libasound present.
+      - name: Install audio libs (ALSA + PulseAudio)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libpulse0
+
+      # Root install also installs the tools/midi workspace (incl. native deps).
+      - name: Install root + CLI deps
+        run: npm ci
+
+      - name: Install web-app deps
+        working-directory: tools/midi/web-app
+        run: npm ci
+
+      - name: Node unit tests
+        working-directory: tools/midi
+        run: npm run test:unit
+
+      - name: Web-app unit tests (Vitest)
+        working-directory: tools/midi/web-app
+        run: npm test
+
+      - name: Build web-app
+        working-directory: tools/midi/web-app
+        run: npm run build
+
+      - name: Install Playwright (chromium)
+        working-directory: tools/midi
+        run: npx playwright install --with-deps chromium
+
+      # Exclude the in-browser SoundFont synthesis tests: they assert real audio
+      # output (AnalyserNode RMS), which CI runners have no audio backend for.
+      - name: E2E (Playwright, deterministic)
+        working-directory: tools/midi
+        run: npx playwright test --grep-invert "synthesizes audio"

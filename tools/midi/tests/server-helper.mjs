@@ -9,7 +9,8 @@ export async function startTestServer(layout, port) {
   const args = ['opl.mjs', 'serve', './tests/fixtures', '--http', String(port)]
   if (layout) args.push('--layout', layout)
   const proc = spawn('node', args, { cwd: toolDir, stdio: 'pipe' })
-  for (let i = 0; i < 40; i++) {
+  // Tolerant of CI cold starts (native module init can take a few seconds).
+  for (let i = 0; i < 100; i++) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/`)
       if (res.ok) return proc
