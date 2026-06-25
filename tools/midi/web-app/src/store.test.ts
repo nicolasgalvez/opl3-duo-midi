@@ -17,6 +17,8 @@ describe('store', () => {
       lastIndex: 0,
       lastPosition: 0,
       player: null,
+      livePosition: 0,
+      liveDuration: 0,
     })
   })
 
@@ -43,6 +45,13 @@ describe('store', () => {
     useStore.getState().rememberPlayback(3, 12.5)
     expect(persisted().lastIndex).toBe(3)
     expect(persisted().lastPosition).toBe(12.5)
+  })
+
+  it('setLive updates the live position/duration without persisting them', () => {
+    useStore.getState().setLive(12.5, 60)
+    expect(useStore.getState().livePosition).toBe(12.5)
+    expect(useStore.getState().liveDuration).toBe(60)
+    expect('livePosition' in persisted()).toBe(false)
   })
 
   it('keeps live player state in memory but never persists it', () => {

@@ -40,7 +40,7 @@ import { EventEmitter } from 'node:events'
 import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
-import { spawn } from 'node:child_process'
+import { spawn, execSync } from 'node:child_process'
 import readline from 'node:readline'
 import easymidi from 'easymidi'
 import toneMidiPkg from '@tonejs/midi'
@@ -771,13 +771,14 @@ function contentType(f) {
   return 'application/octet-stream'
 }
 
-function createServer(engine, port) {
-  // Serve the built Web Player v2 SPA (web-app/dist) when present, falling back
-  // to the legacy static page (web/). render.html lives only in web/, so the
-  // headless renderer keeps working regardless of whether the SPA is built.
+function createServer(engine, port, { useSpa = false } = {}) {
+  // Classic static page (web/) is the default. The Web Player v2 SPA
+  // (web-app/dist) is opt-in via `--ui v2`; when enabled it is preferred but
+  // still falls back to web/ for any path it doesn't own (e.g. /render.html,
+  // which the headless renderer always loads from web/).
   const distDir = join(MIDI_TOOL_DIR, 'web-app', 'dist')
   const legacyDir = join(MIDI_TOOL_DIR, 'web')
-  const roots = existsSync(join(distDir, 'index.html')) ? [distDir, legacyDir] : [legacyDir]
+  const roots = useSpa && existsSync(join(distDir, 'index.html')) ? [distDir, legacyDir] : [legacyDir]
   const server = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://localhost')
     if (u.pathname === '/events') {
@@ -873,6 +874,28 @@ function createServer(engine, port) {
   return server
 }
 
+// Resolve the requested UI ('classic' default, 'v2' opt-in) and make sure the
+// SPA bundle exists. If v2 is requested but unbuilt, try a one-time build; on
+// failure, fall back to classic so `opl serve` always shows *something*.
+function ensureWebUi(argv) {
+  const ui = (argv.ui || process.env.OPL_UI || 'classic').toLowerCase()
+  if (ui !== 'v2') return false
+  const appDir = join(MIDI_TOOL_DIR, 'web-app')
+  if (existsSync(join(appDir, 'dist', 'index.html'))) return true
+  if (!existsSync(join(appDir, 'node_modules'))) {
+    console.error('--ui v2: web-app deps not installed; run `npm install` in tools/midi/web-app. Using classic UI.')
+    return false
+  }
+  try {
+    console.log('Building Web Player v2 (first run)…')
+    execSync('npm run build', { cwd: appDir, stdio: 'ignore' })
+    return existsSync(join(appDir, 'dist', 'index.html'))
+  } catch {
+    console.error('--ui v2: build failed; using classic UI.')
+    return false
+  }
+}
+
 function cmdServe(argv) {
   const engine = new Engine()
   engine.theme = argv.theme || process.env.OPL_THEME || 'green'
@@ -892,8 +915,9 @@ function cmdServe(argv) {
   if (outs.length) engine.selectDevice(outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0])
   if (files.length) engine.load(0)
 
-  createServer(engine, argv.http)
-  console.log(`opl web player:  http://localhost:${argv.http}`)
+  const useSpa = ensureWebUi(argv)
+  createServer(engine, argv.http, { useSpa })
+  console.log(`opl web player:  http://localhost:${argv.http}  (UI: ${useSpa ? 'v2' : 'classic'})`)
   console.log(`folder: ${folder}  (${files.length} tracks)   device: ${engine.deviceName || 'none'}`)
   console.log('Ctrl-C to stop.')
 
@@ -1545,7 +1569,12 @@ yargs(hideBin(process.argv))
           default: false,
           describe: 'loop playlist when a track ends',
         })
-        .option('shuffle', { type: 'boolean', default: false, describe: 'shuffle play order' }),
+        .option('shuffle', { type: 'boolean', default: false, describe: 'shuffle play order' })
+        .option('ui', {
+          type: 'string',
+          choices: ['classic', 'v2'],
+          describe: 'web UI: classic (default) or v2 (React SPA with File/Edit/View menu; or OPL_UI)',
+        }),
     cmdServe,
   )
   .command(

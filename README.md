@@ -106,6 +106,20 @@ An ANSI/CRT-themed page with a 16-channel velocity **equalizer**, playlist, now-
 (track + folder), and transport. Pick the MIDI **output device** in the page (top-right) and
 press play. `Ctrl-C` stops the server.
 
+#### Web Player v2 (React SPA) — `--ui v2`
+
+An optional rebuilt UI (Vite + React + Zustand) adds a desktop-style **File / Edit / View**
+menu bar, drag-free playlist reordering (▲ ▼ ✕ per row), Open/Save dialogs, and persisted
+theme/layout/panel state — on top of the same live SSE equalizer and transport.
+
+```bash
+cd tools/midi/web-app && npm install && npm run build   # one-time build
+opl serve "<folder>" -r --ui v2        # or set OPL_UI=v2
+```
+
+The classic page remains the default; `--ui v2` opts in (and auto-builds the bundle on first
+run if its deps are installed). The headless renderer always uses the classic `render.html`.
+
 ### Headless video renderer (`opl render`)
 
 Renders a MIDI file to a video file — plays the synth, records the audio from a
