@@ -20,6 +20,7 @@
 import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync } from 'node:fs'
 import { basename, extname, join, dirname } from 'node:path'
 import { loadEnv, resolveLib, MIDI_TOOL_DIR } from './lib/paths.mjs'
+import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
 import { resolveLayout } from './lib/layout.mjs'
 import { resolveDimensions } from './lib/presets.mjs'
 import {
@@ -305,6 +306,8 @@ function collectFiles(paths, recursive) {
         }
       }
       walk(p)
+    } else if (isPlaylistFile(p)) {
+      out.push(...loadPlaylist(p)) // .m3u/.m3u8/.jspf — expand to its tracks, in order
     } else {
       out.push(p) // explicit file (let the parser try even odd extensions)
     }
