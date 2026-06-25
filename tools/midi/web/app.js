@@ -12,6 +12,8 @@ const els = {
   tDur: document.getElementById('t-dur'),
   seek: document.getElementById('seek-fill'),
   eq: document.getElementById('eq'),
+  btnRepeat: document.getElementById('btn-repeat'),
+  btnShuffle: document.getElementById('btn-shuffle'),
 }
 const ctx = els.eq.getContext('2d')
 
@@ -72,6 +74,19 @@ const fmt = (s) => {
   s = Math.max(0, s | 0)
   return `${(s / 60) | 0}:${String(s % 60).padStart(2, '0')}`
 }
+
+function syncScrollTitle(el) {
+  if (!el) return
+  el.classList.remove('scroll')
+  el.style.removeProperty('--scroll-dist')
+  requestAnimationFrame(() => {
+    if (el.scrollWidth > el.clientWidth + 1) {
+      el.style.setProperty('--scroll-dist', `${el.clientWidth - el.scrollWidth}px`)
+      el.classList.add('scroll')
+    }
+  })
+}
+
 function updatePos(t, d) {
   els.tCur.textContent = fmt(t)
   els.tDur.textContent = fmt(d)
@@ -108,16 +123,24 @@ function renderState(s) {
   }
   ;[...els.list.children].forEach((li, i) => li.classList.toggle('cur', i === s.index))
   const cur = s.playlist[s.index]
-  els.npName.textContent = cur ? cur.name.replace(/\.midi?$/i, '') : '—'
+  const name = cur ? cur.name.replace(/\.midi?$/i, '') : '—'
+  els.npName.textContent = name
+  syncScrollTitle(els.npName)
   els.npFolder.textContent = cur ? cur.folder : '—'
   if (!s.playing) els.tDur.textContent = fmt(s.duration)
+  els.btnRepeat.classList.toggle('on', !!s.repeat)
+  els.btnShuffle.classList.toggle('on', !!s.shuffle)
   const curLi = els.list.children[s.index]
   if (curLi) curLi.scrollIntoView({ block: 'nearest' })
 }
 
 els.device.onchange = () => api('device', { name: els.device.value })
 document.querySelectorAll('.transport button').forEach((b) => {
-  b.onclick = () => api(b.dataset.act)
+  b.onclick = () => {
+    const act = b.dataset.act
+    if (act === 'repeat' || act === 'shuffle') api(act, { on: !b.classList.contains('on') })
+    else api(act)
+  }
 })
 
 // ---- equalizer ----
