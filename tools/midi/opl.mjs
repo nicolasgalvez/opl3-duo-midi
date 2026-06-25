@@ -17,10 +17,12 @@
  *
  * During `play` in a terminal:  n = next   p = prev   space = pause   q = quit
  */
-import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync, existsSync } from 'node:fs'
 import { basename, extname, join, dirname } from 'node:path'
 import { loadEnv, resolveLib, MIDI_TOOL_DIR } from './lib/paths.mjs'
 import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
+import { toM3U, toJSPF } from './lib/playlistWrite.mjs'
+import { removeTrack as removeTrackPure, moveTrack as moveTrackPure } from './lib/playlistEdit.mjs'
 import { resolveLayout } from './lib/layout.mjs'
 import { resolveDimensions } from './lib/presets.mjs'
 import {
@@ -38,7 +40,7 @@ import { EventEmitter } from 'node:events'
 import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
-import { spawn } from 'node:child_process'
+import { spawn, execSync } from 'node:child_process'
 import readline from 'node:readline'
 import easymidi from 'easymidi'
 import toneMidiPkg from '@tonejs/midi'
@@ -546,6 +548,57 @@ class Engine {
     this._shuffleOrder = this.shuffle ? shuffleOrder(this.playlist.length) : []
   }
 
+  // ── File menu: open folders / files / playlists (reuses collectFiles, which
+  //    handles .m3u/.jspf playlists from ODM-1 and MIDI_LIBRARY resolution). ──
+  openPaths(paths, recursive = false) {
+    const list = Array.isArray(paths) ? paths : [paths]
+    const files = collectFiles(list.filter(Boolean), recursive)
+    this.setPlaylist(files)
+    if (files.length) this.load(0)
+    else {
+      this.index = -1
+      this.broadcastState()
+    }
+  }
+
+  // ── Edit menu: remove / reorder, keeping the playing track under the cursor. ──
+  removeTrack(removeIdx) {
+    const wasCurrent = removeIdx === this.index
+    const { items, current } = removeTrackPure(this.playlist, this.index, removeIdx)
+    this.playlist = items
+    this._shuffleOrder = this.shuffle ? shuffleOrder(items.length) : []
+    if (items.length === 0) {
+      this.index = -1
+      this.stop()
+    } else if (wasCurrent) {
+      this.load(current) // a different track now occupies the slot
+    } else {
+      this.index = current
+      this.broadcastState()
+    }
+  }
+
+  moveTrack(from, to) {
+    const { items, current } = moveTrackPure(this.playlist, this.index, from, to)
+    this.playlist = items
+    this.index = current
+    this._shuffleOrder = this.shuffle ? shuffleOrder(items.length) : []
+    this.broadcastState() // same track keeps playing; only queue order changed
+  }
+
+  // ── File menu: save the current queue as .m3u or .jspf. ──
+  savePlaylist(path, format) {
+    try {
+      const paths = this.playlist.map((p) => p.path)
+      const fmt = format || (String(path).toLowerCase().endsWith('.jspf') ? 'jspf' : 'm3u')
+      const body = fmt === 'jspf' ? toJSPF(paths, { title: this.title }) : toM3U(paths)
+      writeFileSync(path, body)
+      return { ok: true, path, count: paths.length }
+    } catch (e) {
+      return { ok: false, error: e.message }
+    }
+  }
+
   setRepeat(on) {
     this.repeat = !!on
     this.broadcastState()
@@ -718,8 +771,14 @@ function contentType(f) {
   return 'application/octet-stream'
 }
 
-function createServer(engine, port) {
-  const webDir = join(MIDI_TOOL_DIR, 'web')
+function createServer(engine, port, { useSpa = false } = {}) {
+  // Classic static page (web/) is the default. The Web Player v2 SPA
+  // (web-app/dist) is opt-in via `--ui v2`; when enabled it is preferred but
+  // still falls back to web/ for any path it doesn't own (e.g. /render.html,
+  // which the headless renderer always loads from web/).
+  const distDir = join(MIDI_TOOL_DIR, 'web-app', 'dist')
+  const legacyDir = join(MIDI_TOOL_DIR, 'web')
+  const roots = useSpa && existsSync(join(distDir, 'index.html')) ? [distDir, legacyDir] : [legacyDir]
   const server = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://localhost')
     if (u.pathname === '/events') {
@@ -752,10 +811,19 @@ function createServer(engine, port) {
           stop: () => engine.stop(),
           repeat: () => engine.setRepeat(m.on != null ? !!m.on : !engine.repeat),
           shuffle: () => engine.setShuffle(m.on != null ? !!m.on : !engine.shuffle),
+          open: () => engine.openPaths(m.paths ?? m.path, !!m.recursive),
+          remove: () => engine.removeTrack(m.index),
+          reorder: () => engine.moveTrack(m.from, m.to),
+          save: () => engine.savePlaylist(m.path, m.format),
         }
-        if (fns[m.action]) fns[m.action]()
-        res.writeHead(200)
-        res.end('ok')
+        const result = fns[m.action] ? fns[m.action]() : undefined
+        if (result && typeof result === 'object') {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(result))
+        } else {
+          res.writeHead(200)
+          res.end('ok')
+        }
       })
       return
     }
@@ -770,16 +838,21 @@ function createServer(engine, port) {
       }
       return
     }
-    const file = join(webDir, u.pathname === '/' ? '/index.html' : u.pathname)
-    if (!file.startsWith(webDir)) {
-      res.writeHead(403)
-      res.end()
-      return
-    }
+    const rel = u.pathname === '/' ? '/index.html' : u.pathname
     let data
-    try {
-      data = readFileSync(file)
-    } catch {
+    let file
+    for (const root of roots) {
+      const candidate = join(root, rel)
+      if (!candidate.startsWith(root)) continue // path-traversal guard
+      try {
+        data = readFileSync(candidate)
+        file = candidate
+        break
+      } catch {
+        /* try the next root */
+      }
+    }
+    if (data == null) {
       res.writeHead(404)
       res.end('not found')
       return
@@ -801,6 +874,28 @@ function createServer(engine, port) {
   return server
 }
 
+// Resolve the requested UI ('classic' default, 'v2' opt-in) and make sure the
+// SPA bundle exists. If v2 is requested but unbuilt, try a one-time build; on
+// failure, fall back to classic so `opl serve` always shows *something*.
+function ensureWebUi(argv) {
+  const ui = (argv.ui || process.env.OPL_UI || 'classic').toLowerCase()
+  if (ui !== 'v2') return false
+  const appDir = join(MIDI_TOOL_DIR, 'web-app')
+  if (existsSync(join(appDir, 'dist', 'index.html'))) return true
+  if (!existsSync(join(appDir, 'node_modules'))) {
+    console.error('--ui v2: web-app deps not installed; run `npm install` in tools/midi/web-app. Using classic UI.')
+    return false
+  }
+  try {
+    console.log('Building Web Player v2 (first run)…')
+    execSync('npm run build', { cwd: appDir, stdio: 'ignore' })
+    return existsSync(join(appDir, 'dist', 'index.html'))
+  } catch {
+    console.error('--ui v2: build failed; using classic UI.')
+    return false
+  }
+}
+
 function cmdServe(argv) {
   const engine = new Engine()
   engine.theme = argv.theme || process.env.OPL_THEME || 'green'
@@ -820,8 +915,9 @@ function cmdServe(argv) {
   if (outs.length) engine.selectDevice(outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0])
   if (files.length) engine.load(0)
 
-  createServer(engine, argv.http)
-  console.log(`opl web player:  http://localhost:${argv.http}`)
+  const useSpa = ensureWebUi(argv)
+  createServer(engine, argv.http, { useSpa })
+  console.log(`opl web player:  http://localhost:${argv.http}  (UI: ${useSpa ? 'v2' : 'classic'})`)
   console.log(`folder: ${folder}  (${files.length} tracks)   device: ${engine.deviceName || 'none'}`)
   console.log('Ctrl-C to stop.')
 
@@ -1473,7 +1569,12 @@ yargs(hideBin(process.argv))
           default: false,
           describe: 'loop playlist when a track ends',
         })
-        .option('shuffle', { type: 'boolean', default: false, describe: 'shuffle play order' }),
+        .option('shuffle', { type: 'boolean', default: false, describe: 'shuffle play order' })
+        .option('ui', {
+          type: 'string',
+          choices: ['classic', 'v2'],
+          describe: 'web UI: classic (default) or v2 (React SPA with File/Edit/View menu; or OPL_UI)',
+        }),
     cmdServe,
   )
   .command(

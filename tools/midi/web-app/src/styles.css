@@ -1,0 +1,293 @@
+/* Theme tokens (green CRT default, winamp override) — driven by <html data-theme>. */
+:root,
+:root[data-theme='green'] {
+  --bg: #06140c;
+  --panel: #0a2415;
+  --fg: #4af07a;
+  --dim: #1f7a3c;
+  --accent: #ffcc33;
+  --eq-low: #4af07a;
+  --eq-mid: #ffcc33;
+  --eq-high: #ff5a5a;
+  --eq-off: #0f3d20;
+  --menu-bg: #0a2415;
+  --menu-hover: #12351f;
+  font-family: 'Courier New', ui-monospace, monospace;
+}
+
+:root[data-theme='winamp'] {
+  --bg: #1b1b22;
+  --panel: #2b2b38;
+  --fg: #c7cbe0;
+  --dim: #6b6f87;
+  --accent: #76d3ff;
+  --eq-low: #2e8f4f;
+  --eq-mid: #d8c742;
+  --eq-high: #d85a5a;
+  --eq-off: #15151c;
+  --menu-bg: #2b2b38;
+  --menu-hover: #3a3a4c;
+  font-family: 'MS Sans Serif', Tahoma, ui-sans-serif, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ── menu bar ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 8px;
+  background: var(--menu-bg);
+  border-bottom: 1px solid var(--dim);
+}
+.menubar {
+  display: flex;
+}
+.menu {
+  position: relative;
+}
+.menu-title {
+  background: none;
+  border: none;
+  color: var(--fg);
+  padding: 4px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+.menu-title:hover,
+.menu-title[aria-expanded='true'] {
+  background: var(--menu-hover);
+}
+.menu-items {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  min-width: 200px;
+  background: var(--menu-bg);
+  border: 1px solid var(--dim);
+  z-index: 10;
+}
+.menu-items button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--fg);
+  padding: 5px 14px;
+  cursor: pointer;
+  font: inherit;
+  white-space: nowrap;
+}
+.menu-items button:hover {
+  background: var(--menu-hover);
+}
+
+.device {
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--dim);
+  padding: 3px 6px;
+  font: inherit;
+}
+
+/* ── content ── */
+.content {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  padding: 12px;
+  min-height: 0;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--dim);
+  padding: 12px;
+}
+.eq-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.playlist-panel {
+  width: 320px;
+  overflow: auto;
+}
+.panel-title {
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.eq {
+  width: 100%;
+  flex: 1;
+  background: #000;
+  image-rendering: pixelated;
+}
+
+.nowplaying .np-name {
+  font-size: 1.2rem;
+  color: var(--accent);
+}
+.nowplaying .np-folder {
+  color: var(--dim);
+}
+.seek {
+  height: 6px;
+  background: var(--eq-off);
+  margin: 8px 0 4px;
+}
+.seek-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.1s linear;
+}
+.np-time {
+  color: var(--dim);
+  font-size: 0.85rem;
+}
+
+.transport {
+  display: flex;
+  gap: 6px;
+}
+.transport button {
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--dim);
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+.transport .toggle.on {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.playlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.playlist li {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--eq-off);
+}
+.playlist li .pl-main {
+  display: flex;
+  justify-content: space-between;
+  flex: 1;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: var(--fg);
+  padding: 5px 4px;
+  cursor: pointer;
+  font: inherit;
+}
+.playlist li.current .pl-main {
+  color: var(--accent);
+}
+.pl-controls {
+  display: flex;
+  gap: 2px;
+}
+.pl-controls button {
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  padding: 2px 5px;
+  font: inherit;
+}
+.pl-controls button:hover:not(:disabled) {
+  color: var(--fg);
+}
+.pl-controls button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ── File dialogs ── */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.dialog {
+  background: var(--panel);
+  border: 1px solid var(--dim);
+  padding: 16px;
+  min-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dialog-title {
+  color: var(--accent);
+}
+.dialog-input,
+.dialog select {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--dim);
+  padding: 6px;
+  font: inherit;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.dialog-actions button {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--dim);
+  padding: 5px 14px;
+  cursor: pointer;
+  font: inherit;
+}
+.playlist .pl-folder {
+  color: var(--dim);
+}
+.playlist .empty {
+  color: var(--dim);
+  padding: 8px 4px;
+}
+
+/* ── layouts (data-layout on <html>) ── */
+:root[data-layout='minimized'] .playlist-panel {
+  display: none;
+}
+:root[data-layout='overlay'] body,
+:root[data-layout='overlay'] .panel,
+:root[data-layout='overlay'] .topbar {
+  background: transparent;
+}
+:root[data-layout='overlay'] .panel {
+  border-color: transparent;
+}
