@@ -17,6 +17,7 @@ export type MenuActionId =
   | 'view.layout.overlay'
   | 'view.togglePlaylist'
   | 'view.toggleEqualizer'
+  | 'view.toggleLibrary'
   | 'view.fullscreen'
 
 export interface MenuItem {
@@ -57,6 +58,7 @@ export const MENUS: Menu[] = [
       { id: 'view.layout.overlay', label: 'Layout: Overlay' },
       { id: 'view.togglePlaylist', label: 'Toggle Playlist' },
       { id: 'view.toggleEqualizer', label: 'Toggle Equalizer' },
+      { id: 'view.toggleLibrary', label: 'Toggle Library' },
       { id: 'view.fullscreen', label: 'Fullscreen' },
     ],
   },

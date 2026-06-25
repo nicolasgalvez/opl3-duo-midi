@@ -10,6 +10,7 @@ describe('dispatchMenuAction', () => {
       layout: 'normal',
       showPlaylist: true,
       showEqualizer: true,
+      showLibrary: false,
       lastIndex: 0,
       lastPosition: 0,
       player: null,
@@ -32,6 +33,11 @@ describe('dispatchMenuAction', () => {
     dispatchMenuAction('view.toggleEqualizer')
     expect(useStore.getState().showPlaylist).toBe(false)
     expect(useStore.getState().showEqualizer).toBe(false)
+  })
+
+  it('view.toggleLibrary flips library visibility', () => {
+    dispatchMenuAction('view.toggleLibrary')
+    expect(useStore.getState().showLibrary).toBe(true)
   })
 
   it('file.openPlaylist / openFolder / openFiles open the "open" dialog', () => {

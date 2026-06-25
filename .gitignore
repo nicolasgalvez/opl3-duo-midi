@@ -30,3 +30,4 @@ Thumbs.db
 
 # opl library DB (runtime state)
 tools/midi/.opl-library.json
+tools/midi/.opl-uploads/

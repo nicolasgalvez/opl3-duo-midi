@@ -17,7 +17,8 @@
  *
  * During `play` in a terminal:  n = next   p = prev   space = pause   q = quit
  */
-import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync, existsSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync, existsSync, mkdirSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { basename, extname, join, dirname } from 'node:path'
 import { loadEnv, resolveLib, MIDI_TOOL_DIR } from './lib/paths.mjs'
 import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
@@ -543,6 +544,7 @@ class Engine {
     this._shuffleOrder = []
     this.artPath = null
     this.library = null
+    this.uploadsDir = null
     this.theme = 'green'
     this.layout = 'normal'
     this.title = 'OPL · MIDI PLAYER'
@@ -833,6 +835,29 @@ function createServer(engine, port, { useSpa = false } = {}) {
       })
       return
     }
+    if (u.pathname === '/api/library/upload' && req.method === 'POST' && engine.library) {
+      const chunks = []
+      req.on('data', (d) => chunks.push(d))
+      req.on('end', async () => {
+        try {
+          const buf = Buffer.concat(chunks)
+          const name = String(req.headers['x-filename'] || 'upload.mid').replace(/[^\w.\- ]/g, '_')
+          // Content-addressed: identical bytes hash to the same file, so a
+          // re-drop never duplicates on disk or in the library (deduped by path).
+          const hash = createHash('sha1').update(buf).digest('hex').slice(0, 16)
+          mkdirSync(engine.uploadsDir, { recursive: true })
+          const dest = join(engine.uploadsDir, `${hash}-${name}`)
+          if (!existsSync(dest)) writeFileSync(dest, buf)
+          const entry = await engine.library.add(dest, { addedAt: Date.now() })
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, entry }))
+        } catch (e) {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: e.message }))
+        }
+      })
+      return
+    }
     if (u.pathname === '/api/library' && engine.library) {
       if (req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -966,6 +991,7 @@ async function cmdServe(argv) {
   if (files.length) engine.load(0)
 
   const dbPath = process.env.OPL_LIBRARY_DB || join(MIDI_TOOL_DIR, '.opl-library.json')
+  engine.uploadsDir = process.env.OPL_UPLOADS_DIR || join(dirname(dbPath), '.opl-uploads')
   try {
     engine.library = await openLibrary(dbPath)
   } catch (e) {
