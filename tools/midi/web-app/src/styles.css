@@ -228,6 +228,87 @@ body {
   cursor: default;
 }
 
+/* ── Library panel ── */
+.library {
+  width: 320px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lib-search {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--dim);
+  padding: 5px;
+  font: inherit;
+}
+.dropzone {
+  display: block;
+  text-align: center;
+  border: 1px dashed var(--dim);
+  color: var(--dim);
+  padding: 14px 8px;
+  cursor: pointer;
+}
+.dropzone.over {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.lib-addpath {
+  display: flex;
+  gap: 4px;
+}
+.lib-addpath .lib-search {
+  flex: 1;
+}
+.lib-addpath button {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--dim);
+  padding: 4px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+.lib-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+}
+.lib-list li {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--eq-off);
+}
+.lib-name {
+  display: flex;
+  justify-content: space-between;
+  flex: 1;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: var(--fg);
+  padding: 5px 4px;
+  cursor: pointer;
+  font: inherit;
+}
+.lib-list .lib-folder {
+  color: var(--dim);
+}
+.lib-list .empty {
+  color: var(--dim);
+  padding: 8px 4px;
+}
+.lib-list li > button[aria-label^='Remove'] {
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  padding: 2px 6px;
+  font: inherit;
+}
+
 /* ── File dialogs ── */
 .dialog-backdrop {
   position: fixed;

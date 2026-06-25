@@ -120,6 +120,13 @@ opl serve "<folder>" -r --ui v2        # or set OPL_UI=v2
 The classic page remains the default; `--ui v2` opts in (and auto-builds the bundle on first
 run if its deps are installed). The headless renderer always uses the classic `render.html`.
 
+**Media library (v2):** View ▸ Toggle Library opens a persistent library panel — drag `.mid`
+files onto it (or click to add), search by name/folder, play, or remove. Uploaded files are
+stored **content-addressed** (identical bytes are never duplicated) and the library is a small
+JSON DB ([lowdb](https://github.com/typicode/lowdb)) of **paths + metadata only** (never copies),
+so it survives restarts. Locations: `OPL_LIBRARY_DB` (default `tools/midi/.opl-library.json`) and
+`OPL_UPLOADS_DIR` (default `tools/midi/.opl-uploads/`).
+
 ### Headless video renderer (`opl render`)
 
 Renders a MIDI file to a video file — plays the synth, records the audio from a
