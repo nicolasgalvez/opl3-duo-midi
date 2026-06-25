@@ -1,3 +1,19 @@
+/* Tailwind v4 — theme + utilities layers only (no preflight, so the existing
+   hand-written CSS below is untouched and the visual specs stay stable). */
+@layer theme, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/* Expose the runtime green/winamp tokens as Tailwind colors, so utilities like
+   `text-accent` / `bg-panel` stay theme-reactive (they resolve var(--…) live). */
+@theme {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-fg: var(--fg);
+  --color-dim: var(--dim);
+  --color-accent: var(--accent);
+}
+
 /* Theme tokens (green CRT default, winamp override) — driven by <html data-theme>. */
 :root,
 :root[data-theme='green'] {
