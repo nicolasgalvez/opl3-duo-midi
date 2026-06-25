@@ -17,6 +17,8 @@ export interface AppState {
   lastPosition: number
   // ── live, non-persisted server state ──
   player: PlayerState | null
+  livePosition: number
+  liveDuration: number
   dialog: DialogKind
 
   setTheme: (t: Theme) => void
@@ -25,6 +27,7 @@ export interface AppState {
   toggleEqualizer: () => void
   rememberPlayback: (index: number, position: number) => void
   setPlayer: (p: PlayerState) => void
+  setLive: (position: number, duration: number) => void
   setDialog: (d: DialogKind) => void
 }
 
@@ -40,6 +43,8 @@ export const useStore = create<AppState>()(
       lastIndex: 0,
       lastPosition: 0,
       player: null,
+      livePosition: 0,
+      liveDuration: 0,
       dialog: null,
 
       setTheme: (theme) => set({ theme }),
@@ -48,6 +53,7 @@ export const useStore = create<AppState>()(
       toggleEqualizer: () => set((s) => ({ showEqualizer: !s.showEqualizer })),
       rememberPlayback: (lastIndex, lastPosition) => set({ lastIndex, lastPosition }),
       setPlayer: (player) => set({ player }),
+      setLive: (livePosition, liveDuration) => set({ livePosition, liveDuration }),
       setDialog: (dialog) => set({ dialog }),
     }),
     {
