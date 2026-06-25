@@ -67,6 +67,28 @@ opl render song.mid                        # headless video render (below)
 opl panic                                  # silence stuck notes
 ```
 
+### Playlists
+
+`opl play`, `opl serve`, and `opl render` accept **playlist files** anywhere they accept a
+`.mid` file or folder. Two standard formats are supported, and the playlist's **track order is
+preserved** (shuffle/repeat stay opt-in):
+
+- **`.m3u` / `.m3u8`** — the de-facto plaintext format (one path per line; `#` comments and
+  `#EXTINF` lines are ignored). Read/written by VLC, foobar2000, Winamp, etc.
+- **`.jspf`** (and `.json`) — [JSPF](https://www.xspf.org/jspf), the JSON form of the open
+  **XSPF** standard: `{ "playlist": { "track": [ { "location": ["song.mid"] }, … ] } }`.
+
+```bash
+opl play set.m3u                 # play tracks in the order listed
+opl play favorites.jspf          # JSPF works the same way
+opl serve playlist.m3u           # serve a curated playlist in the web UI
+opl render album.jspf -o out.mp4 # render a playlist to video (album mode also works)
+```
+
+Track paths inside a playlist resolve **relative to the playlist file's own folder** first, then
+fall back to `MIDI_LIBRARY` (below). Entries that can't be found are skipped with a warning rather
+than aborting the playlist.
+
 ### Web player + visualizer
 
 ```bash
