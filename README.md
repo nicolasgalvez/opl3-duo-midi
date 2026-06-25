@@ -120,6 +120,12 @@ opl serve "<folder>" -r --ui v2        # or set OPL_UI=v2
 The classic page remains the default; `--ui v2` opts in (and auto-builds the bundle on first
 run if its deps are installed). The headless renderer always uses the classic `render.html`.
 
+**SoundFont output (v2):** the **Output** selector (top-right) switches between the hardware OPL3
+synth and an **in-browser SoundFont** engine ([spessasynth](https://github.com/spessasus/spessasynth_lib),
+WebAudio) — so the player makes sound with no hardware attached. A built-in default SoundFont
+works out of the box; load your own `.sf2` with the **SF2…** button. The 16-channel equalizer is
+driven by the synth's note events in this mode.
+
 **Media library (v2):** View ▸ Toggle Library opens a persistent library panel — drag `.mid`
 files onto it (or click to add), search by name/folder, play, or remove. Uploaded files are
 stored **content-addressed** (identical bytes are never duplicated) and the library is a small

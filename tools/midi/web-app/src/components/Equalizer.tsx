@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { connectEvents } from '../lib/sse'
 import { makeChannel, channelLevel, levelBand, type ChannelState, type EqBand } from '../lib/eq'
+import { useStore } from '../store'
+import { soundfontPlayer } from '../lib/soundfontPlayer'
 
 const CH = 16
 const BAND_COLORS: Record<EqBand, string> = {
@@ -12,6 +14,9 @@ const BAND_COLORS: Record<EqBand, string> = {
 
 export default function Equalizer() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const outputMode = useStore((s) => s.outputMode)
+  const modeRef = useRef(outputMode)
+  modeRef.current = outputMode
 
   useEffect(() => {
     const channels: ChannelState[] = Array.from({ length: CH }, makeChannel)
@@ -43,9 +48,12 @@ export default function Equalizer() {
       if (cv && ctx) {
         const { width, height } = cv
         ctx.clearRect(0, 0, width, height)
+        // In SoundFont mode the synth feeds its own channel levels; otherwise
+        // use the SSE-fed channel model (hardware playback).
+        const sfLevels = modeRef.current === 'soundfont' ? soundfontPlayer.channelLevels() : null
         const bw = width / CH
         for (let i = 0; i < CH; i++) {
-          const lvl = channelLevel(channels[i])
+          const lvl = sfLevels ? sfLevels[i] : channelLevel(channels[i])
           const bh = lvl * height
           ctx.fillStyle = BAND_COLORS[levelBand(lvl)]
           ctx.fillRect(i * bw + 1, height - bh, bw - 2, bh)
