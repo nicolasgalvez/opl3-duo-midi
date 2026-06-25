@@ -101,7 +101,12 @@ body {
   background: var(--menu-hover);
 }
 
-.device {
+.outputs {
+  display: flex;
+  gap: 6px;
+}
+.device,
+.output-mode {
   background: var(--panel);
   color: var(--fg);
   border: 1px solid var(--dim);
