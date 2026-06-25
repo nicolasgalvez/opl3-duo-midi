@@ -7,6 +7,7 @@ import Transport from './components/Transport'
 import Playlist from './components/Playlist'
 import NowPlaying from './components/NowPlaying'
 import DevicePicker from './components/DevicePicker'
+import FileDialogs from './components/FileDialogs'
 
 export default function App() {
   const theme = useStore((s) => s.theme)
@@ -65,6 +66,7 @@ export default function App() {
           </aside>
         )}
       </main>
+      <FileDialogs />
     </div>
   )
 }

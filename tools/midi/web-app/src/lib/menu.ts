@@ -7,9 +7,9 @@ export type MenuActionId =
   | 'file.openFiles'
   | 'file.openPlaylist'
   | 'file.savePlaylist'
-  | 'edit.reorder'
-  | 'edit.rename'
   | 'edit.remove'
+  | 'edit.moveUp'
+  | 'edit.moveDown'
   | 'view.theme.green'
   | 'view.theme.winamp'
   | 'view.layout.normal'
@@ -42,9 +42,9 @@ export const MENUS: Menu[] = [
   {
     title: 'Edit',
     items: [
-      { id: 'edit.reorder', label: 'Reorder Tracks' },
-      { id: 'edit.rename', label: 'Rename Track…' },
-      { id: 'edit.remove', label: 'Remove Track' },
+      { id: 'edit.remove', label: 'Remove Current Track' },
+      { id: 'edit.moveUp', label: 'Move Current Up' },
+      { id: 'edit.moveDown', label: 'Move Current Down' },
     ],
   },
   {

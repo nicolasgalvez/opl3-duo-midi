@@ -10,6 +10,10 @@ export type ApiAction =
   | 'stop'
   | 'repeat'
   | 'shuffle'
+  | 'open'
+  | 'remove'
+  | 'reorder'
+  | 'save'
 
 export async function api(action: ApiAction, extra: Record<string, unknown> = {}): Promise<void> {
   await fetch('/api', {

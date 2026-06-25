@@ -19,6 +19,11 @@ describe('MENUS', () => {
     expect(ids).toContain('view.toggleEqualizer')
   })
 
+  it('Edit can remove and reorder the current track', () => {
+    const ids = MENUS.find((m) => m.title === 'Edit')?.items.map((i) => i.id) ?? []
+    expect(ids).toEqual(['edit.remove', 'edit.moveUp', 'edit.moveDown'])
+  })
+
   it('has no duplicate action ids', () => {
     const ids = MENUS.flatMap((m) => m.items.map((i) => i.id))
     expect(new Set(ids).size).toBe(ids.length)
