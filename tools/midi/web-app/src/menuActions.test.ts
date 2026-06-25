@@ -13,6 +13,7 @@ describe('dispatchMenuAction', () => {
       lastIndex: 0,
       lastPosition: 0,
       player: null,
+      dialog: null,
     })
   })
 
@@ -33,10 +34,19 @@ describe('dispatchMenuAction', () => {
     expect(useStore.getState().showEqualizer).toBe(false)
   })
 
-  it('File/Edit placeholders do not throw and leave UI prefs unchanged', () => {
+  it('file.openPlaylist / openFolder / openFiles open the "open" dialog', () => {
     dispatchMenuAction('file.openPlaylist')
-    dispatchMenuAction('edit.remove')
-    expect(useStore.getState().theme).toBe('green')
-    expect(useStore.getState().showPlaylist).toBe(true)
+    expect(useStore.getState().dialog).toBe('open')
+  })
+
+  it('file.savePlaylist opens the "save" dialog', () => {
+    dispatchMenuAction('file.savePlaylist')
+    expect(useStore.getState().dialog).toBe('save')
+  })
+
+  it('edit.remove with no loaded track is a safe no-op', () => {
+    // player is null here, so there is no current index to act on.
+    expect(() => dispatchMenuAction('edit.remove')).not.toThrow()
+    expect(useStore.getState().dialog).toBeNull()
   })
 })

@@ -1,13 +1,18 @@
 import type { MenuActionId } from './lib/menu'
+import { api } from './lib/api'
 import { useStore } from './store'
 
 /**
- * Apply a menu action. View actions are fully wired (theme/layout/panels/
- * fullscreen); File/Edit actions are placeholders until the backend gains
- * open/save + edit endpoints in a later ODM-3 slice.
+ * Apply a menu action.
+ * - View: theme/layout/panels/fullscreen (local UI state).
+ * - File: open/save a dialog that collects a path, then calls the backend.
+ * - Edit: act on the current track via the backend (remove / move up / down).
  */
 export function dispatchMenuAction(id: MenuActionId): void {
   const s = useStore.getState()
+  const index = s.player?.index ?? -1
+  const len = s.player?.playlist.length ?? 0
+
   switch (id) {
     case 'view.theme.green':
       s.setTheme('green')
@@ -36,14 +41,24 @@ export function dispatchMenuAction(id: MenuActionId): void {
         else void document.documentElement.requestFullscreen?.()
       }
       break
+
     case 'file.openFolder':
     case 'file.openFiles':
     case 'file.openPlaylist':
+      s.setDialog('open')
+      break
     case 'file.savePlaylist':
-    case 'edit.reorder':
-    case 'edit.rename':
+      s.setDialog('save')
+      break
+
     case 'edit.remove':
-      // Not yet wired — needs backend open/save + playlist-edit endpoints.
+      if (index >= 0) void api('remove', { index })
+      break
+    case 'edit.moveUp':
+      if (index > 0) void api('reorder', { from: index, to: index - 1 })
+      break
+    case 'edit.moveDown':
+      if (index >= 0 && index < len - 1) void api('reorder', { from: index, to: index + 1 })
       break
   }
 }

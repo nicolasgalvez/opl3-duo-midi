@@ -21,6 +21,8 @@ import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync
 import { basename, extname, join, dirname } from 'node:path'
 import { loadEnv, resolveLib, MIDI_TOOL_DIR } from './lib/paths.mjs'
 import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
+import { toM3U, toJSPF } from './lib/playlistWrite.mjs'
+import { removeTrack as removeTrackPure, moveTrack as moveTrackPure } from './lib/playlistEdit.mjs'
 import { resolveLayout } from './lib/layout.mjs'
 import { resolveDimensions } from './lib/presets.mjs'
 import {
@@ -546,6 +548,57 @@ class Engine {
     this._shuffleOrder = this.shuffle ? shuffleOrder(this.playlist.length) : []
   }
 
+  // ── File menu: open folders / files / playlists (reuses collectFiles, which
+  //    handles .m3u/.jspf playlists from ODM-1 and MIDI_LIBRARY resolution). ──
+  openPaths(paths, recursive = false) {
+    const list = Array.isArray(paths) ? paths : [paths]
+    const files = collectFiles(list.filter(Boolean), recursive)
+    this.setPlaylist(files)
+    if (files.length) this.load(0)
+    else {
+      this.index = -1
+      this.broadcastState()
+    }
+  }
+
+  // ── Edit menu: remove / reorder, keeping the playing track under the cursor. ──
+  removeTrack(removeIdx) {
+    const wasCurrent = removeIdx === this.index
+    const { items, current } = removeTrackPure(this.playlist, this.index, removeIdx)
+    this.playlist = items
+    this._shuffleOrder = this.shuffle ? shuffleOrder(items.length) : []
+    if (items.length === 0) {
+      this.index = -1
+      this.stop()
+    } else if (wasCurrent) {
+      this.load(current) // a different track now occupies the slot
+    } else {
+      this.index = current
+      this.broadcastState()
+    }
+  }
+
+  moveTrack(from, to) {
+    const { items, current } = moveTrackPure(this.playlist, this.index, from, to)
+    this.playlist = items
+    this.index = current
+    this._shuffleOrder = this.shuffle ? shuffleOrder(items.length) : []
+    this.broadcastState() // same track keeps playing; only queue order changed
+  }
+
+  // ── File menu: save the current queue as .m3u or .jspf. ──
+  savePlaylist(path, format) {
+    try {
+      const paths = this.playlist.map((p) => p.path)
+      const fmt = format || (String(path).toLowerCase().endsWith('.jspf') ? 'jspf' : 'm3u')
+      const body = fmt === 'jspf' ? toJSPF(paths, { title: this.title }) : toM3U(paths)
+      writeFileSync(path, body)
+      return { ok: true, path, count: paths.length }
+    } catch (e) {
+      return { ok: false, error: e.message }
+    }
+  }
+
   setRepeat(on) {
     this.repeat = !!on
     this.broadcastState()
@@ -757,10 +810,19 @@ function createServer(engine, port) {
           stop: () => engine.stop(),
           repeat: () => engine.setRepeat(m.on != null ? !!m.on : !engine.repeat),
           shuffle: () => engine.setShuffle(m.on != null ? !!m.on : !engine.shuffle),
+          open: () => engine.openPaths(m.paths ?? m.path, !!m.recursive),
+          remove: () => engine.removeTrack(m.index),
+          reorder: () => engine.moveTrack(m.from, m.to),
+          save: () => engine.savePlaylist(m.path, m.format),
         }
-        if (fns[m.action]) fns[m.action]()
-        res.writeHead(200)
-        res.end('ok')
+        const result = fns[m.action] ? fns[m.action]() : undefined
+        if (result && typeof result === 'object') {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(result))
+        } else {
+          res.writeHead(200)
+          res.end('ok')
+        }
       })
       return
     }

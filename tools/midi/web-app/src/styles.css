@@ -174,21 +174,88 @@ body {
   margin: 0;
   padding: 0;
 }
-.playlist li button {
+.playlist li {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--eq-off);
+}
+.playlist li .pl-main {
   display: flex;
   justify-content: space-between;
-  width: 100%;
+  flex: 1;
   gap: 8px;
   background: none;
   border: none;
-  border-bottom: 1px solid var(--eq-off);
   color: var(--fg);
   padding: 5px 4px;
   cursor: pointer;
   font: inherit;
 }
-.playlist li.current button {
+.playlist li.current .pl-main {
   color: var(--accent);
+}
+.pl-controls {
+  display: flex;
+  gap: 2px;
+}
+.pl-controls button {
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  padding: 2px 5px;
+  font: inherit;
+}
+.pl-controls button:hover:not(:disabled) {
+  color: var(--fg);
+}
+.pl-controls button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ── File dialogs ── */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.dialog {
+  background: var(--panel);
+  border: 1px solid var(--dim);
+  padding: 16px;
+  min-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dialog-title {
+  color: var(--accent);
+}
+.dialog-input,
+.dialog select {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--dim);
+  padding: 6px;
+  font: inherit;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.dialog-actions button {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--dim);
+  padding: 5px 14px;
+  cursor: pointer;
+  font: inherit;
 }
 .playlist .pl-folder {
   color: var(--dim);
