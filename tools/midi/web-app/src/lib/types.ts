@@ -38,3 +38,12 @@ export interface ResetEvent {
 }
 
 export type ServerEvent = PlayerState | NoteEvent | PosEvent | ResetEvent
+
+export interface LibraryEntry {
+  id: number
+  path: string
+  name: string
+  folder: string
+  addedAt: number | null
+  tags: string[]
+}

@@ -17,12 +17,14 @@
  *
  * During `play` in a terminal:  n = next   p = prev   space = pause   q = quit
  */
-import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync, existsSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync, existsSync, mkdirSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { basename, extname, join, dirname } from 'node:path'
 import { loadEnv, resolveLib, MIDI_TOOL_DIR } from './lib/paths.mjs'
 import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
 import { toM3U, toJSPF } from './lib/playlistWrite.mjs'
 import { removeTrack as removeTrackPure, moveTrack as moveTrackPure } from './lib/playlistEdit.mjs'
+import { openLibrary } from './lib/library.mjs'
 import { resolveLayout } from './lib/layout.mjs'
 import { resolveDimensions } from './lib/presets.mjs'
 import {
@@ -285,6 +287,10 @@ function cmdPanic(argv) {
 // --------------------------------------------------------------------------
 //  Playlist player
 // --------------------------------------------------------------------------
+function arr(v) {
+  return Array.isArray(v) ? v : v == null ? [] : [v]
+}
+
 function collectFiles(paths, recursive) {
   const isMidi = (p) => MIDI_EXTS.includes(extname(p).toLowerCase())
   const out = []
@@ -537,6 +543,8 @@ class Engine {
     this.shuffle = false
     this._shuffleOrder = []
     this.artPath = null
+    this.library = null
+    this.uploadsDir = null
     this.theme = 'green'
     this.layout = 'normal'
     this.title = 'OPL · MIDI PLAYER'
@@ -827,6 +835,73 @@ function createServer(engine, port, { useSpa = false } = {}) {
       })
       return
     }
+    if (u.pathname === '/api/library/upload' && req.method === 'POST' && engine.library) {
+      const chunks = []
+      req.on('data', (d) => chunks.push(d))
+      req.on('end', async () => {
+        try {
+          const buf = Buffer.concat(chunks)
+          const name = String(req.headers['x-filename'] || 'upload.mid').replace(/[^\w.\- ]/g, '_')
+          // Content-addressed: identical bytes hash to the same file, so a
+          // re-drop never duplicates on disk or in the library (deduped by path).
+          const hash = createHash('sha1').update(buf).digest('hex').slice(0, 16)
+          mkdirSync(engine.uploadsDir, { recursive: true })
+          const dest = join(engine.uploadsDir, `${hash}-${name}`)
+          if (!existsSync(dest)) writeFileSync(dest, buf)
+          const entry = await engine.library.add(dest, { addedAt: Date.now() })
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, entry }))
+        } catch (e) {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: e.message }))
+        }
+      })
+      return
+    }
+    if (u.pathname === '/api/library' && engine.library) {
+      if (req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ entries: engine.library.list(u.searchParams.get('q')) }))
+        return
+      }
+      if (req.method === 'POST') {
+        let body = ''
+        req.on('data', (d) => {
+          body += d
+        })
+        req.on('end', async () => {
+          let m = {}
+          try {
+            m = JSON.parse(body)
+          } catch {
+            /* ignore */
+          }
+          let result = { ok: false }
+          try {
+            if (m.op === 'add') {
+              const files = collectFiles(arr(m.paths ?? m.path).filter(Boolean), !!m.recursive)
+              const added = await engine.library.addMany(files, { addedAt: Date.now() })
+              result = { ok: true, added: added.length, total: engine.library.list().length }
+            } else if (m.op === 'remove') {
+              result = { ok: await engine.library.remove(m.id) }
+            } else if (m.op === 'play') {
+              const ids = new Set(arr(m.ids))
+              const paths = engine.library
+                .list()
+                .filter((e) => ids.has(e.id))
+                .map((e) => e.path)
+              engine.openPaths(paths)
+              result = { ok: true, count: paths.length }
+            }
+          } catch (e) {
+            result = { ok: false, error: e.message }
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(result))
+        })
+        return
+      }
+    }
     if (u.pathname === '/art' && engine.artPath) {
       try {
         const data = readFileSync(engine.artPath)
@@ -896,7 +971,7 @@ function ensureWebUi(argv) {
   }
 }
 
-function cmdServe(argv) {
+async function cmdServe(argv) {
   const engine = new Engine()
   engine.theme = argv.theme || process.env.OPL_THEME || 'green'
   engine.title = argv.title || process.env.OPL_TITLE || engine.title
@@ -914,6 +989,14 @@ function cmdServe(argv) {
   const outs = easymidi.getOutputs()
   if (outs.length) engine.selectDevice(outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0])
   if (files.length) engine.load(0)
+
+  const dbPath = process.env.OPL_LIBRARY_DB || join(MIDI_TOOL_DIR, '.opl-library.json')
+  engine.uploadsDir = process.env.OPL_UPLOADS_DIR || join(dirname(dbPath), '.opl-uploads')
+  try {
+    engine.library = await openLibrary(dbPath)
+  } catch (e) {
+    console.error('library disabled:', e.message)
+  }
 
   const useSpa = ensureWebUi(argv)
   createServer(engine, argv.http, { useSpa })
