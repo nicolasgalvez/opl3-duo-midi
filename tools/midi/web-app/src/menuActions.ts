@@ -1,6 +1,6 @@
 import type { MenuActionId } from './lib/menu'
 import { api } from './lib/api'
-import { useStore } from './store'
+import { useStore, type Theme } from './store'
 
 /**
  * Apply a menu action.
@@ -10,16 +10,17 @@ import { useStore } from './store'
  */
 export function dispatchMenuAction(id: MenuActionId): void {
   const s = useStore.getState()
+
+  // Theme actions are generated from the registry; handle them generically.
+  if (id.startsWith('view.theme.')) {
+    s.chooseTheme(id.slice('view.theme.'.length) as Theme)
+    return
+  }
+
   const index = s.player?.index ?? -1
   const len = s.player?.playlist.length ?? 0
 
   switch (id) {
-    case 'view.theme.green':
-      s.setTheme('green')
-      break
-    case 'view.theme.winamp':
-      s.setTheme('winamp')
-      break
     case 'view.layout.normal':
       s.setLayout('normal')
       break

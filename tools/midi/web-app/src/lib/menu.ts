@@ -1,6 +1,7 @@
+import { THEMES, type ThemeName } from './themes'
+
 // Desktop-style menu bar modelled as data so the UI renders from it and tests
-// can assert its structure. Each item carries a stable action id dispatched by
-// the MenuBar component.
+// can assert its structure. Each item carries a stable action id.
 
 export type MenuActionId =
   | 'file.openFolder'
@@ -10,8 +11,7 @@ export type MenuActionId =
   | 'edit.remove'
   | 'edit.moveUp'
   | 'edit.moveDown'
-  | 'view.theme.green'
-  | 'view.theme.winamp'
+  | `view.theme.${ThemeName}`
   | 'view.layout.normal'
   | 'view.layout.minimized'
   | 'view.layout.overlay'
@@ -29,6 +29,13 @@ export interface Menu {
   title: string
   items: MenuItem[]
 }
+
+// Theme options are generated from the registry so adding a WCAG-AA theme in
+// themes.ts surfaces it in the menu automatically.
+const themeItems: MenuItem[] = THEMES.map((t) => ({
+  id: `view.theme.${t.name}` as MenuActionId,
+  label: `Theme: ${t.label}`,
+}))
 
 export const MENUS: Menu[] = [
   {
@@ -51,8 +58,7 @@ export const MENUS: Menu[] = [
   {
     title: 'View',
     items: [
-      { id: 'view.theme.green', label: 'Theme: Green CRT' },
-      { id: 'view.theme.winamp', label: 'Theme: Winamp' },
+      ...themeItems,
       { id: 'view.layout.normal', label: 'Layout: Normal' },
       { id: 'view.layout.minimized', label: 'Layout: Minimized' },
       { id: 'view.layout.overlay', label: 'Layout: Overlay' },

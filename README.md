@@ -133,7 +133,12 @@ opl serve "<folder>" -r --preset player-only   # SoundFont output, no menu/uploa
 opl serve "<folder>" -r --config ./opl.json    # custom config file (or OPL_CONFIG=...)
 ```
 
-`opl.json` keys (all optional): `title`, `theme` (`green`/`winamp`), `layout`
+**Themes (v2):** pick from **Green CRT**, **Winamp**, **Win98**, or **Amber CRT** in the View menu
+— your choice persists and overrides any server default. Every theme is verified to meet
+**WCAG 2.2 AA** contrast (see `web-app/src/lib/themes.test.ts`); add a new one in
+`web-app/src/lib/themes.ts` and it appears in the menu automatically.
+
+`opl.json` keys (all optional): `title`, `theme` (`green`/`winamp`/`win98`/`amber`), `layout`
 (`normal`/`minimized`/`overlay`), `output` (`hardware`/`soundfont`), and
 `features` (`menu`, `playlist`, `library`, `edit`, `devicePicker`, `outputPicker` booleans).
 A file may also set `"preset": "player-only"` and override individual keys. The SPA reads the

@@ -12,6 +12,7 @@ describe('store', () => {
     localStorage.clear()
     useStore.setState({
       theme: 'green',
+      themeUserSet: false,
       layout: 'normal',
       showPlaylist: true,
       showEqualizer: true,
@@ -31,6 +32,15 @@ describe('store', () => {
     useStore.getState().setTheme('winamp')
     expect(useStore.getState().theme).toBe('winamp')
     expect(persisted().theme).toBe('winamp')
+  })
+
+  it('chooseTheme records an explicit user choice (themeUserSet) and persists it', () => {
+    expect(useStore.getState().themeUserSet).toBe(false)
+    useStore.getState().chooseTheme('win98')
+    expect(useStore.getState().theme).toBe('win98')
+    expect(useStore.getState().themeUserSet).toBe(true)
+    expect(persisted().theme).toBe('win98')
+    expect(persisted().themeUserSet).toBe(true)
   })
 
   it('setLayout persists', () => {
