@@ -75,6 +75,7 @@ opl serve "<folder>" -r            # serve a folder of .mid files (recursive)
 opl serve "<folder>" -r --http 8080   # use a different port
 opl serve "<folder>" -r --layout minimized   # video-friendly: no playlist, large title
 opl serve "<folder>" -r --layout overlay     # OBS browser source (transparent bg)
+opl serve "<folder>" -r --repeat --shuffle   # loop playlist, random order
 ```
 
 Set `OPL_LAYOUT=minimized|overlay` in `.env` (repo root or `tools/midi/.env`).
