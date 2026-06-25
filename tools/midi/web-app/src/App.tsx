@@ -78,7 +78,11 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        {features.menu ? <MenuBar /> : <div className="brand">{useStore.getState().config.title}</div>}
+        {features.menu ? (
+          <MenuBar />
+        ) : (
+          <div className="brand text-accent text-lg">{useStore.getState().config.title}</div>
+        )}
         <div className="outputs">
           {features.outputPicker && <OutputPicker />}
           {features.devicePicker && <DevicePicker />}
