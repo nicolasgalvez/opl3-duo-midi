@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { connectEvents } from './lib/sse'
 import { useStore } from './store'
 import { fetchConfig } from './lib/config'
+import { applyTheme } from './lib/themes'
 import MenuBar from './components/MenuBar'
 import Equalizer from './components/Equalizer'
 import Transport from './components/Transport'
@@ -37,14 +38,16 @@ export default function App() {
       // Apply server-driven values when they differ from the schema default
       // (explicit --theme/--layout, preset, or config file); otherwise the
       // user's persisted prefs win. A locked output is always forced.
-      if (cfg.theme !== 'green') s.setTheme(cfg.theme)
+      // Server/operator theme only seeds a fresh user; an explicit in-app
+      // choice (themeUserSet) wins on reload.
+      if (cfg.theme !== 'green' && !s.themeUserSet) s.setTheme(cfg.theme)
       if (cfg.layout !== 'normal') s.setLayout(cfg.layout)
       if (cfg.output !== 'hardware' || !cfg.features.outputPicker) s.setOutputMode(cfg.output)
     })
   }, [])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme
+    applyTheme(theme, document.documentElement)
   }, [theme])
   useEffect(() => {
     document.documentElement.dataset.layout = layout
@@ -78,7 +81,11 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        {features.menu ? <MenuBar /> : <div className="brand">{useStore.getState().config.title}</div>}
+        {features.menu ? (
+          <MenuBar />
+        ) : (
+          <div className="brand text-accent text-lg">{useStore.getState().config.title}</div>
+        )}
         <div className="outputs">
           {features.outputPicker && <OutputPicker />}
           {features.devicePicker && <DevicePicker />}

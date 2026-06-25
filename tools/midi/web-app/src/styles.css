@@ -1,33 +1,34 @@
-/* Theme tokens (green CRT default, winamp override) — driven by <html data-theme>. */
-:root,
-:root[data-theme='green'] {
+/* Tailwind v4 — theme + utilities layers only (no preflight, so the existing
+   hand-written CSS below is untouched and the visual specs stay stable). */
+@layer theme, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/* Expose the runtime green/winamp tokens as Tailwind colors, so utilities like
+   `text-accent` / `bg-panel` stay theme-reactive (they resolve var(--…) live). */
+@theme {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-fg: var(--fg);
+  --color-dim: var(--dim);
+  --color-accent: var(--accent);
+}
+
+/* Theme colours come from src/lib/themes.ts (applied as CSS variables at runtime,
+   WCAG 2.2 AA-verified). These :root values are only a first-paint fallback. */
+:root {
   --bg: #06140c;
   --panel: #0a2415;
-  --fg: #4af07a;
-  --dim: #1f7a3c;
-  --accent: #ffcc33;
+  --fg: #6dffa0;
+  --dim: #46c777;
+  --accent: #ffd23f;
   --eq-low: #4af07a;
   --eq-mid: #ffcc33;
   --eq-high: #ff5a5a;
   --eq-off: #0f3d20;
   --menu-bg: #0a2415;
-  --menu-hover: #12351f;
-  font-family: 'Courier New', ui-monospace, monospace;
-}
-
-:root[data-theme='winamp'] {
-  --bg: #1b1b22;
-  --panel: #2b2b38;
-  --fg: #c7cbe0;
-  --dim: #6b6f87;
-  --accent: #76d3ff;
-  --eq-low: #2e8f4f;
-  --eq-mid: #d8c742;
-  --eq-high: #d85a5a;
-  --eq-off: #15151c;
-  --menu-bg: #2b2b38;
-  --menu-hover: #3a3a4c;
-  font-family: 'MS Sans Serif', Tahoma, ui-sans-serif, sans-serif;
+  --menu-hover: #14502c;
+  --font: 'Courier New', ui-monospace, monospace;
 }
 
 * {
@@ -37,6 +38,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
+  font-family: var(--font);
 }
 
 .app {
