@@ -17,7 +17,7 @@
  *
  * During `play` in a terminal:  n = next   p = prev   space = pause   q = quit
  */
-import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync, existsSync } from 'node:fs'
 import { basename, extname, join, dirname } from 'node:path'
 import { loadEnv, resolveLib, MIDI_TOOL_DIR } from './lib/paths.mjs'
 import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
@@ -719,7 +719,12 @@ function contentType(f) {
 }
 
 function createServer(engine, port) {
-  const webDir = join(MIDI_TOOL_DIR, 'web')
+  // Serve the built Web Player v2 SPA (web-app/dist) when present, falling back
+  // to the legacy static page (web/). render.html lives only in web/, so the
+  // headless renderer keeps working regardless of whether the SPA is built.
+  const distDir = join(MIDI_TOOL_DIR, 'web-app', 'dist')
+  const legacyDir = join(MIDI_TOOL_DIR, 'web')
+  const roots = existsSync(join(distDir, 'index.html')) ? [distDir, legacyDir] : [legacyDir]
   const server = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://localhost')
     if (u.pathname === '/events') {
@@ -770,16 +775,21 @@ function createServer(engine, port) {
       }
       return
     }
-    const file = join(webDir, u.pathname === '/' ? '/index.html' : u.pathname)
-    if (!file.startsWith(webDir)) {
-      res.writeHead(403)
-      res.end()
-      return
-    }
+    const rel = u.pathname === '/' ? '/index.html' : u.pathname
     let data
-    try {
-      data = readFileSync(file)
-    } catch {
+    let file
+    for (const root of roots) {
+      const candidate = join(root, rel)
+      if (!candidate.startsWith(root)) continue // path-traversal guard
+      try {
+        data = readFileSync(candidate)
+        file = candidate
+        break
+      } catch {
+        /* try the next root */
+      }
+    }
+    if (data == null) {
       res.writeHead(404)
       res.end('not found')
       return
