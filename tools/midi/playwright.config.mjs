@@ -1,7 +1,5 @@
 import { defineConfig } from '@playwright/test'
 
-const PORT = 7390
-
 export default defineConfig({
   testDir: './tests',
   testMatch: /.*\.spec\.mjs/,
@@ -9,15 +7,8 @@ export default defineConfig({
   fullyParallel: false,
   reporter: 'list',
   use: {
-    baseURL: `http://localhost:${PORT}`,
     viewport: { width: 1100, height: 800 },
   },
-  // Boot `opl serve` against the bundled fixture folder for the test run.
-  webServer: {
-    command: `node opl.mjs serve ./tests/fixtures --http ${PORT} --title "OPL · MIDI PLAYER"`,
-    url: `http://localhost:${PORT}`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 20000,
-  },
+  // Each spec boots its own `opl serve` instance (own port + isolated state).
   projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
 })
