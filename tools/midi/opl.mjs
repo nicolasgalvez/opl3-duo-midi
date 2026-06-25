@@ -31,6 +31,7 @@ import {
   waitForFile,
   waitForObsRecording,
 } from './lib/obs.mjs'
+import { buildMuxArgs, resolveAvOffset } from './lib/mux.mjs'
 import { EventEmitter } from 'node:events'
 import http from 'node:http'
 import net from 'node:net'
@@ -995,32 +996,8 @@ async function setupRenderEngine({ playlist, singleMode, argv, devName, port }) 
   return { engine, server, httpPort }
 }
 
-async function muxVideoAudio({ videoFile, audioFile, outPath, fps }) {
-  const muxArgs = [
-    '-i',
-    videoFile,
-    '-i',
-    audioFile,
-    '-c:v',
-    'libx264',
-    '-preset',
-    'medium',
-    '-crf',
-    '18',
-    '-pix_fmt',
-    'yuv420p',
-    '-r',
-    String(fps),
-    '-c:a',
-    'aac',
-    '-b:a',
-    '192k',
-    '-movflags',
-    '+faststart',
-    '-shortest',
-    '-y',
-    outPath,
-  ]
+async function muxVideoAudio({ videoFile, audioFile, outPath, fps, avOffsetMs = 0 }) {
+  const muxArgs = buildMuxArgs({ videoFile, audioFile, outPath, fps, avOffsetMs })
   await new Promise((resolve, reject) => {
     spawn('ffmpeg', muxArgs, { stdio: ['ignore', 'inherit', 'inherit'] }).on('close', (code) => {
       if (code === 0) resolve()
@@ -1144,9 +1121,14 @@ async function renderSessionObs({ playlist, singleMode, totalDuration, outPath, 
   }
 
   console.log(`OBS video: ${videoFile}`)
+  const avOffsetMs = resolveAvOffset(argv)
+  if (avOffsetMs) {
+    const hint = avOffsetMs > 0 ? 'audio delayed relative to video' : 'video delayed relative to audio'
+    console.log(`A/V offset: ${avOffsetMs > 0 ? '+' : ''}${avOffsetMs}ms (${hint})`)
+  }
   console.log('Encoding final video...')
   try {
-    await muxVideoAudio({ videoFile, audioFile, outPath, fps: argv.fps })
+    await muxVideoAudio({ videoFile, audioFile, outPath, fps: argv.fps, avOffsetMs })
   } catch (e) {
     console.error(e.message)
     cleanup()
@@ -1243,8 +1225,13 @@ async function renderSession({ playlist, singleMode, totalDuration, outPath, lab
   }
 
   console.log('Encoding final video...')
+  const avOffsetMs = resolveAvOffset(argv)
+  if (avOffsetMs) {
+    const hint = avOffsetMs > 0 ? 'audio delayed relative to video' : 'video delayed relative to audio'
+    console.log(`A/V offset: ${avOffsetMs > 0 ? '+' : ''}${avOffsetMs}ms (${hint})`)
+  }
   try {
-    await muxVideoAudio({ videoFile, audioFile, outPath, fps: argv.fps })
+    await muxVideoAudio({ videoFile, audioFile, outPath, fps: argv.fps, avOffsetMs })
   } catch (e) {
     console.error(e.message)
     cleanup()
@@ -1508,6 +1495,10 @@ yargs(hideBin(process.argv))
         .option('obs-source', {
           type: 'string',
           describe: 'OBS browser source name to point at the visualizer (or OPL_OBS_SOURCE in .env)',
+        })
+        .option('av-offset', {
+          type: 'number',
+          describe: 'A/V sync tweak in ms at mux (+ delays audio, − delays video; or OPL_AV_OFFSET)',
         }),
     cmdRender,
   )

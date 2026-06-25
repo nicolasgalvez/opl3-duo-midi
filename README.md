@@ -114,6 +114,10 @@ opl render song.mid --layout minimized --platform youtube --aspect landscape
 opl render song.mid --obs --obs-source "OPL Visualizer"
 # Set OPL_OBS_URL, OPL_OBS_PASSWORD, OPL_OBS_SOURCE in .env as needed
 
+# If video leads audio (common with OBS), tweak sync at mux time:
+opl render song.mid --obs --av-offset 200    # delay audio 200ms
+opl render song.mid --av-offset -100         # delay video 100ms (any render mode)
+
 # With album art and custom output
 opl render song.mid --art cover.png -o video.mp4
 
@@ -155,6 +159,7 @@ Options:
 | `--obs-source`          | `OPL_OBS_SOURCE`        | OBS browser source name to auto-point at visualizer    |
 | `--obs-url`             | `ws://127.0.0.1:4455`   | OBS WebSocket URL (`OPL_OBS_URL`)                      |
 | `--obs-password`        | `OPL_OBS_PASSWORD`      | OBS WebSocket password                                 |
+| `--av-offset <ms>`      | `OPL_AV_OFFSET`         | Sync tweak at mux: + delays audio, − delays video      |
 | `--resolution WxH`      | _(from ratio/platform)_ | Custom resolution (overrides presets)                  |
 | `-o, --output <path>`   | auto                    | Output `.mp4` file path                                |
 | `--art <path>`          | _(none)_                | Album art image to overlay                             |

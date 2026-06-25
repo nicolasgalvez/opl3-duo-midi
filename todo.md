@@ -1,41 +1,20 @@
-# Display modes, platform presets, and root CLI
+# A/V offset for render
 
-## Root CLI & npm link
+## CLI & env
 
-- [x] Add `opl` bin to root `package.json` pointing at `tools/midi/opl.mjs`
-- [x] Configure npm workspaces so `npm install` / `npm link` work from repo root
-- [x] Load `.env` from repo root and `tools/midi/.env`
-- [x] Update Playwright webServer to invoke CLI from repo root
+- [x] `--av-offset <ms>` on `opl render` — delay audio (+) or video (−) at mux time
+- [x] `OPL_AV_OFFSET` env var support
+- [x] Document in README (especially useful with `--obs`)
 
-## Display layout modes (`--layout` / `OPL_LAYOUT`)
+## Implementation
 
-- [x] **`minimized`** — hide playlist; larger song title with horizontal scroll when too long
-- [x] **`overlay`** — transparent background; title at bottom with high-contrast outline; EQ as small square in corner (OBS)
-- [x] Wire layout into `serve` and `render` CLI args
-- [x] Support `OPL_LAYOUT` env var (minimized | overlay | normal)
+- [x] Extract `resolveAvOffset` + `buildMuxArgs` to `lib/mux.mjs`
+- [x] Wire into `muxVideoAudio` for both Playwright and OBS render paths
 
-## Platform dimension presets (`--platform` / `--aspect`)
+## Tests (TDD)
 
-- [x] YouTube: landscape 1920×1080, portrait 1080×1920 (Shorts)
-- [x] Instagram: square 1080×1080, portrait 1080×1350 (feed), story 1080×1920 (Reels)
-- [x] CLI: `--platform youtube|instagram`, `--aspect landscape|portrait|square|story`
-- [x] Priority: `--resolution` > platform+aspect > legacy `--ratio`
-- [x] Unit tests for preset resolution
+- [x] `tests/mux.test.mjs` — offset parsing and ffmpeg arg generation
 
-## Web UI
+## Ship
 
-- [x] Inject `data-layout` on served HTML (like `data-theme`)
-- [x] CSS/JS for minimized and overlay layouts in `index.html`, `render.html`, `style.css`
-- [x] Playwright tests for each layout mode
-
-## Tests (red/green TDD)
-
-- [x] `tests/layout.test.mjs` — layout arg/env parsing
-- [x] `tests/presets.test.mjs` — platform/aspect dimension resolution
-- [x] `tests/minimized.spec.mjs` — minimized UI behavior
-- [x] `tests/overlay.spec.mjs` — overlay UI behavior
-
-## PR
-
-- [x] Branch `feat/display-modes-and-root-cli`
-- [ ] Open PR when green
+- [ ] Commit and push to PR branch
