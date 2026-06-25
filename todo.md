@@ -1,20 +1,26 @@
-# A/V offset for render
+# Repeat & shuffle controls
 
-## CLI & env
+## Engine
 
-- [x] `--av-offset <ms>` on `opl render` — delay audio (+) or video (−) at mux time
-- [x] `OPL_AV_OFFSET` env var support
-- [x] Document in README (especially useful with `--obs`)
+- [x] Default: no repeat (stop at end of playlist)
+- [x] `repeat` loops playlist; `shuffle` randomizes play order
+- [x] Disable both for headless render sessions
 
-## Implementation
+## CLI (`opl serve`)
 
-- [x] Extract `resolveAvOffset` + `buildMuxArgs` to `lib/mux.mjs`
-- [x] Wire into `muxVideoAudio` for both Playwright and OBS render paths
+- [x] `--repeat` / `--loop` and `--shuffle` flags
+- [x] `OPL_REPEAT` / `OPL_SHUFFLE` env vars
+
+## Web UI
+
+- [x] Repeat and shuffle toggle buttons in transport
+- [x] Reflect state from SSE; post toggles to `/api`
 
 ## Tests (TDD)
 
-- [x] `tests/mux.test.mjs` — offset parsing and ffmpeg arg generation
+- [x] `tests/playback.test.mjs` — next-index logic
+- [x] `tests/web.spec.mjs` — toggle buttons + API
 
 ## Ship
 
-- [ ] Commit and push to PR branch
+- [x] Commit and push

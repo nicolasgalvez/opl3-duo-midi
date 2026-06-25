@@ -178,6 +178,9 @@ button {
 button:hover { background: var(--green-faint); }
 button:active { background: var(--green); color: #000; text-shadow: none; }
 button.go { border-color: var(--green); color: var(--amber); }
+button.toggle { min-width: 4.5em; }
+button.toggle.on { background: var(--green); color: #000; text-shadow: none; border-color: var(--green); }
+[data-theme="winamp"] button.toggle.on { color: #000; }
 
 /* ── Minimized layout: hide playlist, large scrolling title ── */
 [data-layout="minimized"] .playlist { display: none; }

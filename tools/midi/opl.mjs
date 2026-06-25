@@ -32,6 +32,7 @@ import {
   waitForObsRecording,
 } from './lib/obs.mjs'
 import { buildMuxArgs, resolveAvOffset } from './lib/mux.mjs'
+import { nextPlaylistIndex, prevPlaylistIndex, shuffleOrder } from './lib/playback.mjs'
 import { EventEmitter } from 'node:events'
 import http from 'node:http'
 import net from 'node:net'
@@ -527,6 +528,9 @@ class Engine {
     this.lastPos = 0
     this.clients = new Set()
     this.single = false
+    this.repeat = false
+    this.shuffle = false
+    this._shuffleOrder = []
     this.artPath = null
     this.theme = 'green'
     this.layout = 'normal'
@@ -536,6 +540,18 @@ class Engine {
 
   setPlaylist(files) {
     this.playlist = files.map((f) => ({ path: f, name: basename(f), folder: basename(dirname(f)) }))
+    this._shuffleOrder = this.shuffle ? shuffleOrder(this.playlist.length) : []
+  }
+
+  setRepeat(on) {
+    this.repeat = !!on
+    this.broadcastState()
+  }
+
+  setShuffle(on) {
+    this.shuffle = !!on
+    this._shuffleOrder = this.shuffle ? shuffleOrder(this.playlist.length) : []
+    this.broadcastState()
   }
 
   selectDevice(name) {
@@ -602,11 +618,29 @@ class Engine {
       this.stop()
       return
     }
-    this.load((this.index + 1) % this.playlist.length)
+    const idx = nextPlaylistIndex({
+      index: this.index,
+      length: this.playlist.length,
+      repeat: this.repeat,
+      shuffle: this.shuffle,
+      order: this._shuffleOrder,
+    })
+    if (idx == null) {
+      this.stop()
+      return
+    }
+    this.load(idx)
     this.play()
   }
   prev() {
-    this.load(this.index > 0 ? this.index - 1 : 0)
+    if (this.playlist.length === 0) return
+    const idx = prevPlaylistIndex({
+      index: this.index,
+      length: this.playlist.length,
+      shuffle: this.shuffle,
+      order: this._shuffleOrder,
+    })
+    this.load(idx)
     this.play()
   }
 
@@ -644,6 +678,8 @@ class Engine {
       playlist: this.playlist.map((p, i) => ({ i, name: p.name, folder: p.folder })),
       index: this.index,
       playing: this.playing,
+      repeat: this.repeat,
+      shuffle: this.shuffle,
       duration: this.duration,
       position: this.elapsed,
     }
@@ -711,6 +747,8 @@ function createServer(engine, port) {
           next: () => engine.next(),
           prev: () => engine.prev(),
           stop: () => engine.stop(),
+          repeat: () => engine.setRepeat(m.on != null ? !!m.on : !engine.repeat),
+          shuffle: () => engine.setShuffle(m.on != null ? !!m.on : !engine.shuffle),
         }
         if (fns[m.action]) fns[m.action]()
         res.writeHead(200)
@@ -773,6 +811,8 @@ function cmdServe(argv) {
   const folder = resolveLib(argv.folder || process.cwd())
   const files = collectFiles([folder], argv.recursive)
   engine.setPlaylist(files)
+  engine.repeat = !!(argv.repeat || argv.loop || process.env.OPL_REPEAT === '1' || process.env.OPL_REPEAT === 'true')
+  engine.setShuffle(!!(argv.shuffle || process.env.OPL_SHUFFLE === '1' || process.env.OPL_SHUFFLE === 'true'))
   const outs = easymidi.getOutputs()
   if (outs.length) engine.selectDevice(outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0])
   if (files.length) engine.load(0)
@@ -964,6 +1004,8 @@ function createRenderCleanup(engine, server) {
 async function setupRenderEngine({ playlist, singleMode, argv, devName, port }) {
   const engine = new Engine()
   engine.single = singleMode
+  engine.repeat = false
+  engine.shuffle = false
   engine.theme = argv.theme || process.env.OPL_THEME || 'green'
   engine.title = argv.title || process.env.OPL_TITLE || engine.title
   const layoutArgv = { ...argv }
@@ -1421,7 +1463,14 @@ yargs(hideBin(process.argv))
           type: 'string',
           choices: ['normal', 'minimized', 'overlay'],
           describe: 'display layout: normal, minimized (hide playlist, large title), or overlay (OBS transparent)',
-        }),
+        })
+        .option('repeat', {
+          alias: 'loop',
+          type: 'boolean',
+          default: false,
+          describe: 'loop playlist when a track ends',
+        })
+        .option('shuffle', { type: 'boolean', default: false, describe: 'shuffle play order' }),
     cmdServe,
   )
   .command(
