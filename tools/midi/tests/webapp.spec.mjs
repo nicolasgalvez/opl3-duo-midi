@@ -118,6 +118,32 @@ test('library: View ▸ Toggle Library, upload a file, it appears and persists',
   await page.close()
 })
 
+test('SoundFont mode: switching output + Play synthesizes audio in-browser', async ({ browser }) => {
+  const page = await browser.newPage(base)
+  await page.goto('/')
+
+  // Switch from hardware MIDI to the in-browser SoundFont (built-in default bank).
+  await page.getByLabel('Output mode').selectOption('soundfont')
+  // The controller fetches the current track's MIDI; Play awaits that load.
+  await page.getByRole('button', { name: 'Play' }).click()
+
+  // The default SoundFont must produce real audio (non-zero master RMS) AND its
+  // note events must feed the 16-channel equalizer (data-ch) — caught together
+  // during a sounding note.
+  const meter = page.getByTestId('sf-meter')
+  await expect
+    .poll(
+      async () => {
+        const level = Number(await meter.getAttribute('data-level'))
+        const ch = Number(await meter.getAttribute('data-ch'))
+        return level > 0 && ch > 0
+      },
+      { timeout: 12000, intervals: [120] },
+    )
+    .toBe(true)
+  await page.close()
+})
+
 test('playlist row exposes reorder + remove controls that post to /api', async ({ browser }) => {
   const page = await browser.newPage(base)
   const posted = []

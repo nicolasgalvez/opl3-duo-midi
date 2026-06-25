@@ -10,6 +10,7 @@ import DevicePicker from './components/DevicePicker'
 import OutputPicker from './components/OutputPicker'
 import FileDialogs from './components/FileDialogs'
 import Library from './components/Library'
+import SoundfontController from './components/SoundfontController'
 import { fetchLibrary } from './lib/libraryApi'
 
 export default function App() {
@@ -86,6 +87,7 @@ export default function App() {
         )}
         {showLibrary && <Library />}
       </main>
+      <SoundfontController />
       <FileDialogs />
     </div>
   )
