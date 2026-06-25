@@ -34,12 +34,12 @@ export default function App() {
       const s = useStore.getState()
       s.setConfig(cfg)
       document.title = cfg.title
-      if (!cfg.features.menu) {
-        s.setTheme(cfg.theme)
-        s.setLayout(cfg.layout)
-        s.setOutputMode(cfg.output)
-      }
-      if (!cfg.features.outputPicker) s.setOutputMode(cfg.output)
+      // Apply server-driven values when they differ from the schema default
+      // (explicit --theme/--layout, preset, or config file); otherwise the
+      // user's persisted prefs win. A locked output is always forced.
+      if (cfg.theme !== 'green') s.setTheme(cfg.theme)
+      if (cfg.layout !== 'normal') s.setLayout(cfg.layout)
+      if (cfg.output !== 'hardware' || !cfg.features.outputPicker) s.setOutputMode(cfg.output)
     })
   }, [])
 

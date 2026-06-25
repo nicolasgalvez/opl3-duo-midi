@@ -106,19 +106,21 @@ An ANSI/CRT-themed page with a 16-channel velocity **equalizer**, playlist, now-
 (track + folder), and transport. Pick the MIDI **output device** in the page (top-right) and
 press play. `Ctrl-C` stops the server.
 
-#### Web Player v2 (React SPA) — `--ui v2`
+#### Web Player v2 (React SPA) — the default UI
 
-An optional rebuilt UI (Vite + React + Zustand) adds a desktop-style **File / Edit / View**
-menu bar, drag-free playlist reordering (▲ ▼ ✕ per row), Open/Save dialogs, and persisted
-theme/layout/panel state — on top of the same live SSE equalizer and transport.
+The player UI is a Vite + React + Zustand SPA with a desktop-style **File / Edit / View** menu
+bar, drag-free playlist reordering (▲ ▼ ✕ per row), Open/Save dialogs, and persisted
+theme/layout/panel state — on top of the same live SSE equalizer and transport. It supports the
+`normal`/`minimized`/`overlay` layouts at parity with the renderer.
 
 ```bash
-cd tools/midi/web-app && npm install && npm run build   # one-time build
-opl serve "<folder>" -r --ui v2        # or set OPL_UI=v2
+cd tools/midi/web-app && npm install   # one-time: install the SPA's deps
+opl serve "<folder>" -r                # v2 by default (auto-builds the bundle on first run)
+opl serve "<folder>" -r --ui classic   # opt back to the legacy static page (or OPL_UI=classic)
 ```
 
-The classic page remains the default; `--ui v2` opts in (and auto-builds the bundle on first
-run if its deps are installed). The headless renderer always uses the classic `render.html`.
+If the SPA can't be built (its deps aren't installed) `opl serve` falls back to the classic page.
+The headless renderer always uses the classic `render.html`.
 
 #### Config + feature flags (embeddable player)
 
