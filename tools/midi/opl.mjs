@@ -835,6 +835,25 @@ function createServer(engine, port, { useSpa = false } = {}) {
       })
       return
     }
+    if (u.pathname === '/api/midi') {
+      // Serve a track's raw MIDI bytes so the in-browser SoundFont sequencer
+      // (ODM-5) can load and play it client-side.
+      const i = Number(u.searchParams.get('index'))
+      const track = engine.playlist[Number.isInteger(i) ? i : engine.index]
+      if (track) {
+        try {
+          const data = readFileSync(track.path)
+          res.writeHead(200, { 'Content-Type': 'audio/midi' })
+          res.end(data)
+          return
+        } catch {
+          /* fall through to 404 */
+        }
+      }
+      res.writeHead(404)
+      res.end('not found')
+      return
+    }
     if (u.pathname === '/api/library/upload' && req.method === 'POST' && engine.library) {
       const chunks = []
       req.on('data', (d) => chunks.push(d))
