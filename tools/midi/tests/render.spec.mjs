@@ -1,7 +1,18 @@
 import { test, expect } from '@playwright/test'
+import { startTestServer, stopTestServer } from './server-helper.mjs'
 
-// The render page is served by the same opl serve instance that the
-// Playwright webServer config boots against ./tests/fixtures.
+// The render page (web/render.html) is served by an `opl serve` instance booted
+// for this spec on its own port. (The global Playwright webServer was removed in
+// ODM-7; every spec now boots its own server.)
+const PORT = 7393
+const BASE = `http://127.0.0.1:${PORT}`
+test.use({ baseURL: BASE })
+
+let proc
+test.beforeAll(async () => {
+  proc = await startTestServer(null, PORT)
+})
+test.afterAll(() => stopTestServer(proc))
 
 test('render page shows fullscreen visualizer with no interactive controls', async ({ page }) => {
   await page.goto('/render.html')
@@ -45,7 +56,7 @@ test.describe('aspect ratio layouts', () => {
     ['1:1 square', { width: 1080, height: 1080 }],
   ]) {
     test(`render page adapts to ${name}`, async ({ browser }) => {
-      const page = await browser.newPage({ viewport: size })
+      const page = await browser.newPage({ viewport: size, baseURL: BASE })
       await page.goto('/render.html')
       await expect(page.locator('#eq')).toBeVisible()
       await expect(page.locator('#track-name')).toContainText('scale', { timeout: 5000 })
