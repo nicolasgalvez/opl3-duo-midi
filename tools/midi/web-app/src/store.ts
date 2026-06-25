@@ -3,7 +3,8 @@ import { persist } from 'zustand/middleware'
 import type { PlayerState, LibraryEntry } from './lib/types'
 import { DEFAULT_CONFIG, type AppConfig } from './lib/config'
 
-export type Theme = 'green' | 'winamp'
+export type { ThemeName as Theme } from './lib/themes'
+import type { ThemeName as Theme } from './lib/themes'
 export type Layout = 'normal' | 'minimized' | 'overlay'
 export type DialogKind = null | 'open' | 'save'
 export type OutputMode = 'hardware' | 'soundfont'
@@ -11,6 +12,7 @@ export type OutputMode = 'hardware' | 'soundfont'
 export interface AppState {
   // ── persisted UI preferences ──
   theme: Theme
+  themeUserSet: boolean
   layout: Layout
   showPlaylist: boolean
   showEqualizer: boolean
@@ -28,6 +30,7 @@ export interface AppState {
   dialog: DialogKind
 
   setTheme: (t: Theme) => void
+  chooseTheme: (t: Theme) => void
   setLayout: (l: Layout) => void
   togglePlaylist: () => void
   toggleEqualizer: () => void
@@ -47,6 +50,7 @@ export const useStore = create<AppState>()(
   persist(
     (set) => ({
       theme: 'green',
+      themeUserSet: false,
       layout: 'normal',
       showPlaylist: true,
       showEqualizer: true,
@@ -62,6 +66,8 @@ export const useStore = create<AppState>()(
       dialog: null,
 
       setTheme: (theme) => set({ theme }),
+      // Explicit user choice — wins over a server/operator default on reload.
+      chooseTheme: (theme) => set({ theme, themeUserSet: true }),
       setLayout: (layout) => set({ layout }),
       togglePlaylist: () => set((s) => ({ showPlaylist: !s.showPlaylist })),
       toggleEqualizer: () => set((s) => ({ showEqualizer: !s.showEqualizer })),
@@ -79,6 +85,7 @@ export const useStore = create<AppState>()(
       // Only UI prefs + playback memory persist; live server state never does.
       partialize: (s) => ({
         theme: s.theme,
+        themeUserSet: s.themeUserSet,
         layout: s.layout,
         showPlaylist: s.showPlaylist,
         showEqualizer: s.showEqualizer,

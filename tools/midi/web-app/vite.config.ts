@@ -1,12 +1,13 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 // Dev server proxies the live backend (run `opl serve` on :7373 alongside `npm run dev`).
 // Production: `npm run build` emits dist/, which tools/midi/opl.mjs serves directly.
 const BACKEND = 'http://localhost:7373'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   base: './',
   build: { outDir: 'dist', emptyOutDir: true },
   server: {

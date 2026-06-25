@@ -74,6 +74,23 @@ test('View ▸ Theme: Winamp switches theme and survives a reload (persisted sta
   await page.close()
 })
 
+test('View ▸ theme options apply a new palette (Win98) and persist', async ({ browser }) => {
+  const page = await browser.newPage(base)
+  await page.goto('/')
+  await page.getByRole('button', { name: 'View', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Theme: Win98' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'win98')
+  // The actual palette is applied as CSS variables, not just the attribute.
+  const bg = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--bg').trim().toLowerCase(),
+  )
+  expect(bg).toBe('#c0c0c0')
+  // Survives a reload (applied before first paint from persisted state).
+  await page.reload()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'win98')
+  await page.close()
+})
+
 test('File ▸ Open shows a path dialog', async ({ browser }) => {
   const page = await browser.newPage(base)
   await page.goto('/')

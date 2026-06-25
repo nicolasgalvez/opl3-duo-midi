@@ -20,7 +20,7 @@ const FeaturesSchema = z
 export const ConfigSchema = z
   .object({
     title: z.string().default('OPL · MIDI PLAYER'),
-    theme: z.enum(['green', 'winamp']).default('green'),
+    theme: z.enum(['green', 'winamp', 'win98', 'amber']).default('green'),
     layout: z.enum(['normal', 'minimized', 'overlay']).default('normal'),
     output: z.enum(['hardware', 'soundfont']).default('hardware'),
     features: FeaturesSchema,
