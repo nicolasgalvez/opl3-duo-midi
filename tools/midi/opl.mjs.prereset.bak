@@ -631,7 +631,7 @@ class Engine {
 
   load(i) {
     if (i < 0 || i >= this.playlist.length) return
-    this.resetAll() // full reset between tracks (mod/pitch/sustain/program)
+    this.allNotesOff()
     this.index = i
     try {
       const r = buildEventList(this.playlist[i].path)
@@ -705,24 +705,6 @@ class Engine {
     for (let c = 0; c < 16; c++) {
       this.out.send('cc', { controller: 120, value: 0, channel: c })
       this.out.send('cc', { controller: 123, value: 0, channel: c })
-    }
-  }
-
-  // Full GM-style reset so controller state (mod wheel, pitch bend, sustain, expression,
-  // volume, pan, program) can't bleed from one track into the next in album/playlist mode.
-  resetAll() {
-    if (!this.out) return
-    for (let c = 0; c < 16; c++) {
-      this.out.send('cc', { controller: 120, value: 0, channel: c })   // all sound off
-      this.out.send('cc', { controller: 123, value: 0, channel: c })   // all notes off
-      this.out.send('cc', { controller: 121, value: 0, channel: c })   // reset all controllers
-      this.out.send('cc', { controller: 64, value: 0, channel: c })    // sustain off
-      this.out.send('cc', { controller: 1, value: 0, channel: c })     // mod wheel 0
-      this.out.send('cc', { controller: 11, value: 127, channel: c })  // expression max
-      this.out.send('cc', { controller: 7, value: 100, channel: c })   // channel volume default
-      this.out.send('cc', { controller: 10, value: 64, channel: c })   // pan center
-      this.out.send('pitch', { value: 8192, channel: c })              // pitch bend center
-      this.out.send('program', { number: 0, channel: c })              // program 0
     }
   }
 
