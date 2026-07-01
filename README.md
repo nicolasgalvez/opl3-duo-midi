@@ -192,6 +192,11 @@ opl render song.mid --layout minimized --platform youtube --aspect landscape
 opl render song.mid --obs --obs-source "OPL Visualizer"
 # Set OPL_OBS_URL, OPL_OBS_PASSWORD, OPL_OBS_SOURCE in .env as needed
 
+# Playwright's downloaded browser has a rising minimum macOS version (currently 14+).
+# On an older Mac, point it at an installed browser instead:
+opl render song.mid --browser-path "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+# Or set OPL_BROWSER_PATH in .env. --obs is the other workaround for old macOS.
+
 # If video leads audio (common with OBS), tweak sync at mux time:
 opl render song.mid --obs --av-offset 200    # delay audio 200ms
 opl render song.mid --av-offset -100         # delay video 100ms (any render mode)
@@ -226,26 +231,27 @@ Set `OPL_PLATFORM` / `OPL_ASPECT` / `OPL_LAYOUT` in `.env`.
 
 Options:
 
-| Flag                    | Default                 | Description                                            |
-| ----------------------- | ----------------------- | ------------------------------------------------------ |
-| `--audio-device <name>` | `OPL_AUDIO_DEVICE` env  | Audio input device (BlackHole 2ch, default, hw:1,0, …) |
-| `--ratio <preset>`      | `16:9`                  | Legacy aspect ratio: `16:9`, `9:16`, `1:1`, `4:5`      |
-| `--platform`            | —                       | `youtube` or `instagram` (use with `--aspect`)         |
-| `--aspect`              | —                       | `landscape`, `portrait`, `square`, `story`             |
-| `--layout`              | `normal`                | `normal`, `minimized`, or `overlay`                    |
-| `--obs`                 | off                     | Capture video from OBS WebSocket instead of Playwright |
-| `--obs-source`          | `OPL_OBS_SOURCE`        | OBS browser source name to auto-point at visualizer    |
-| `--obs-url`             | `ws://127.0.0.1:4455`   | OBS WebSocket URL (`OPL_OBS_URL`)                      |
-| `--obs-password`        | `OPL_OBS_PASSWORD`      | OBS WebSocket password                                 |
-| `--av-offset <ms>`      | `OPL_AV_OFFSET`         | Sync tweak at mux: + delays audio, − delays video      |
-| `--resolution WxH`      | _(from ratio/platform)_ | Custom resolution (overrides presets)                  |
-| `-o, --output <path>`   | auto                    | Output `.mp4` file path                                |
-| `--art <path>`          | _(none)_                | Album art image to overlay                             |
-| `--tail <seconds>`      | `3`                     | Recording tail after last MIDI note                    |
-| `--fps <n>`             | `30`                    | Output video framerate                                 |
-| `--device <name>`       | `OPL_MIDI_DEVICE` env   | MIDI output device substring (auto-detects if unset)   |
-| `--keep-temps`          | off                     | Keep intermediate WebM/WAV files                       |
-| `--list-audio`          | —                       | List audio devices and exit                            |
+| Flag                    | Default                 | Description                                                             |
+| ----------------------- | ----------------------- | ----------------------------------------------------------------------- |
+| `--audio-device <name>` | `OPL_AUDIO_DEVICE` env  | Audio input device (BlackHole 2ch, default, hw:1,0, …)                  |
+| `--ratio <preset>`      | `16:9`                  | Legacy aspect ratio: `16:9`, `9:16`, `1:1`, `4:5`                       |
+| `--platform`            | —                       | `youtube` or `instagram` (use with `--aspect`)                          |
+| `--aspect`              | —                       | `landscape`, `portrait`, `square`, `story`                              |
+| `--layout`              | `normal`                | `normal`, `minimized`, or `overlay`                                     |
+| `--obs`                 | off                     | Capture video from OBS WebSocket instead of Playwright                  |
+| `--obs-source`          | `OPL_OBS_SOURCE`        | OBS browser source name to auto-point at visualizer                     |
+| `--obs-url`             | `ws://127.0.0.1:4455`   | OBS WebSocket URL (`OPL_OBS_URL`)                                       |
+| `--obs-password`        | `OPL_OBS_PASSWORD`      | OBS WebSocket password                                                  |
+| `--browser-path <path>` | `OPL_BROWSER_PATH`      | Installed Chrome/Chromium to drive instead of Playwright's own download |
+| `--av-offset <ms>`      | `OPL_AV_OFFSET`         | Sync tweak at mux: + delays audio, − delays video                       |
+| `--resolution WxH`      | _(from ratio/platform)_ | Custom resolution (overrides presets)                                   |
+| `-o, --output <path>`   | auto                    | Output `.mp4` file path                                                 |
+| `--art <path>`          | _(none)_                | Album art image to overlay                                              |
+| `--tail <seconds>`      | `3`                     | Recording tail after last MIDI note                                     |
+| `--fps <n>`             | `30`                    | Output video framerate                                                  |
+| `--device <name>`       | `OPL_MIDI_DEVICE` env   | MIDI output device substring (auto-detects if unset)                    |
+| `--keep-temps`          | off                     | Keep intermediate WebM/WAV files                                        |
+| `--list-audio`          | —                       | List audio devices and exit                                             |
 
 **How it works:** The command starts an internal web server with the visualizer,
 launches a headless Chromium browser (Playwright), records audio via `ffmpeg` from

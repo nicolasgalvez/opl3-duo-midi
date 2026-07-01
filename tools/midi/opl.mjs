@@ -1188,6 +1188,7 @@ async function resolveRenderOpts(argv) {
     : outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0]
 
   let chromium = null
+  const browserPath = argv.browserPath || process.env.OPL_BROWSER_PATH || null
   if (!argv.obs) {
     try {
       const pw = await import('playwright')
@@ -1201,7 +1202,7 @@ async function resolveRenderOpts(argv) {
 
   const obsOpts = argv.obs ? resolveObsOpts(argv) : null
 
-  return { dims, audioDevice, audioChannels, audioRate, devName, chromium, obsOpts }
+  return { dims, audioDevice, audioChannels, audioRate, devName, chromium, browserPath, obsOpts }
 }
 
 function createRenderCleanup(engine, server) {
@@ -1432,7 +1433,7 @@ async function renderSession({ playlist, singleMode, totalDuration, outPath, lab
     return renderSessionObs({ playlist, singleMode, totalDuration, outPath, label, argv, opts })
   }
 
-  const { dims, audioDevice, audioChannels, audioRate, devName, chromium } = opts
+  const { dims, audioDevice, audioChannels, audioRate, devName, chromium, browserPath } = opts
 
   const { engine, server, httpPort } = await setupRenderEngine({ playlist, singleMode, argv, devName })
   const cleanup = createRenderCleanup(engine, server)
@@ -1444,7 +1445,23 @@ async function renderSession({ playlist, singleMode, totalDuration, outPath, lab
     `Resolution: ${dims.w}x${dims.h}  Audio: ${audioDevice}${audioChannels ? ` ch${audioChannels}` : ''} @ ${audioRate}Hz  MIDI: ${devName}`,
   )
 
-  const browser = await chromium.launch({ headless: true })
+  let browser
+  try {
+    browser = await chromium.launch({ headless: true, executablePath: browserPath || undefined })
+  } catch (e) {
+    console.error(
+      `Failed to launch ${browserPath ? `browser at ${browserPath}` : "Playwright's bundled browser"}: ${e.message}`,
+    )
+    if (!browserPath) {
+      console.error(
+        "If this is an older OS (e.g. macOS < 14), Playwright's downloaded browser may not run here.\n" +
+          'Point at an installed Chrome/Chromium instead with --browser-path (or OPL_BROWSER_PATH), e.g.:\n' +
+          '  --browser-path "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"\n' +
+          'Or capture via a live OBS session instead: --obs',
+      )
+    }
+    process.exit(1)
+  }
   const context = await browser.newContext({
     viewport: { width: dims.w, height: dims.h },
     recordVideo: { dir: tmpDir, size: { width: dims.w, height: dims.h } },
@@ -1796,6 +1813,11 @@ yargs(hideBin(process.argv))
         .option('av-offset', {
           type: 'number',
           describe: 'A/V sync tweak in ms at mux (+ delays audio, − delays video; or OPL_AV_OFFSET)',
+        })
+        .option('browser-path', {
+          type: 'string',
+          describe:
+            "path to an installed Chromium/Chrome executable to drive instead of downloading one (or OPL_BROWSER_PATH). Use when Playwright's bundled browser won't launch on this OS (e.g. macOS < 14).",
         }),
     cmdRender,
   )
