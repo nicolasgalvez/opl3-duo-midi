@@ -21,6 +21,7 @@ import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync
 import { createHash } from 'node:crypto'
 import { basename, extname, join, dirname } from 'node:path'
 import { loadEnv, resolveLib, MIDI_TOOL_DIR } from './lib/paths.mjs'
+import { readMidiData } from './lib/midiFile.mjs'
 import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
 import { toM3U, toJSPF } from './lib/playlistWrite.mjs'
 import { removeTrack as removeTrackPure, moveTrack as moveTrackPure } from './lib/playlistEdit.mjs'
@@ -337,7 +338,7 @@ function collectFiles(paths, recursive) {
 
 // Flatten a parsed MIDI file into a time-sorted list of send actions.
 function buildEvents(out, path, forceCh) {
-  const midi = new Midi(readFileSync(path))
+  const midi = new Midi(readMidiData(path))
   const events = []
   for (const track of midi.tracks) {
     const ch = forceCh != null ? forceCh - 1 : track.channel
@@ -491,7 +492,7 @@ async function cmdPlay(argv) {
 
 // Flatten a .mid into plain data events (no closures) for the engine + viz.
 function buildEventList(path, forceCh) {
-  const midi = new Midi(readFileSync(path))
+  const midi = new Midi(readMidiData(path))
   const events = []
   for (const track of midi.tracks) {
     const ch = forceCh != null ? forceCh - 1 : track.channel
@@ -1572,7 +1573,7 @@ async function cmdRender(argv) {
   if (argv.album && files.length > 1) {
     let totalDuration = argv.tail
     for (const f of files) {
-      const midi = new Midi(readFileSync(f))
+      const midi = new Midi(readMidiData(f))
       totalDuration += midi.duration
     }
     console.log(`Album: ${files.length} tracks, ${totalDuration.toFixed(1)}s total`)
@@ -1591,7 +1592,7 @@ async function cmdRender(argv) {
 
   // --- Single file ---
   if (files.length === 1) {
-    const midi = new Midi(readFileSync(files[0]))
+    const midi = new Midi(readMidiData(files[0]))
     const totalDuration = midi.duration + argv.tail
     const outPath = argv.output || join(process.cwd(), `${basename(files[0], extname(files[0]))}.${tag}.mp4`)
     await renderSession({
@@ -1611,7 +1612,7 @@ async function cmdRender(argv) {
   for (let i = 0; i < files.length; i++) {
     console.log(`\n[${i + 1}/${files.length}]`)
     try {
-      const midi = new Midi(readFileSync(files[i]))
+      const midi = new Midi(readMidiData(files[i]))
       const totalDuration = midi.duration + argv.tail
       const outPath = join(process.cwd(), `${basename(files[i], extname(files[i]))}.${tag}.mp4`)
       await renderSession({
