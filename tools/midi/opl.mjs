@@ -22,7 +22,7 @@ import { createHash } from 'node:crypto'
 import { basename, extname, join, dirname } from 'node:path'
 import { loadEnv, resolveLib, MIDI_TOOL_DIR } from './lib/paths.mjs'
 import { readMidiData } from './lib/midiFile.mjs'
-import { buildControllerResetMessages } from './lib/midiReset.mjs'
+import { buildControllerResetMessages, buildAllNotesOffMessages, sendMessages } from './lib/midiReset.mjs'
 import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
 import { toM3U, toJSPF } from './lib/playlistWrite.mjs'
 import { removeTrack as removeTrackPure, moveTrack as moveTrackPure } from './lib/playlistEdit.mjs'
@@ -215,11 +215,7 @@ function openOutput(requested) {
 }
 
 function allNotesOff(out) {
-  for (let ch = 0; ch < 16; ch++) {
-    out.send('cc', { controller: 64, value: 0, channel: ch }) // sustain off
-    out.send('cc', { controller: 120, value: 0, channel: ch }) // all sound off
-    out.send('cc', { controller: 123, value: 0, channel: ch }) // all notes off
-  }
+  sendMessages(out, buildAllNotesOffMessages())
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -420,7 +416,7 @@ function playOne(out, path, forceCh, keys) {
         if (!paused) {
           paused = true
           pauseAt = performance.now()
-          allNotesOff(out)
+          sendMessages(out, buildControllerResetMessages())
           process.stdout.write('   ⏸  paused\n')
         } else {
           paused = false
@@ -477,7 +473,7 @@ async function cmdPlay(argv) {
   while (i >= 0 && i < files.length) {
     process.stdout.write(`[${i + 1}/${files.length}] `)
     const action = await playOne(out, files[i], argv.ch, keys)
-    allNotesOff(out)
+    sendMessages(out, buildControllerResetMessages()) // full reset between tracks — mirrors Engine.load()
     if (action === 'quit') break
     i = action === 'prev' ? Math.max(0, i - 1) : i + 1
     if (i >= files.length && argv.loop) i = 0
@@ -725,19 +721,14 @@ class Engine {
 
   allNotesOff() {
     if (!this.out) return
-    for (let c = 0; c < 16; c++) {
-      this.out.send('cc', { controller: 120, value: 0, channel: c })
-      this.out.send('cc', { controller: 123, value: 0, channel: c })
-    }
+    sendMessages(this.out, buildAllNotesOffMessages())
   }
 
   // Full GM-style reset so controller state (mod wheel, pitch bend, sustain, expression,
   // volume, pan, program) can't bleed from one track into the next in album/playlist mode.
   resetAll() {
     if (!this.out) return
-    for (const { type, data } of buildControllerResetMessages()) {
-      this.out.send(type, data)
-    }
+    sendMessages(this.out, buildControllerResetMessages())
   }
 
   tick() {
