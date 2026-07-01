@@ -77,16 +77,21 @@ export async function waitForObsRecording(obs, timeoutMs = 5000) {
   throw new Error('OBS did not start recording within 5s.')
 }
 
-/** Poll until the recorded file exists on disk. */
+/** Poll until the recorded file exists AND its size has stopped growing (OBS finishes
+ *  flushing/finalizing the container a moment after StopRecord resolves — reading too
+ *  early can hand ffmpeg a truncated EBML header). */
 export async function waitForFile(path, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs
+  let lastSize = -1
   while (Date.now() < deadline) {
     try {
-      statSync(path)
-      return
+      const { size } = statSync(path)
+      if (size > 0 && size === lastSize) return
+      lastSize = size
     } catch {
-      await new Promise((r) => setTimeout(r, 200))
+      /* not written yet */
     }
+    await new Promise((r) => setTimeout(r, 200))
   }
   throw new Error(`Timed out waiting for OBS output file: ${path}`)
 }
