@@ -22,6 +22,7 @@ import { createHash } from 'node:crypto'
 import { basename, extname, join, dirname } from 'node:path'
 import { loadEnv, resolveLib, MIDI_TOOL_DIR } from './lib/paths.mjs'
 import { readMidiData } from './lib/midiFile.mjs'
+import { buildControllerResetMessages } from './lib/midiReset.mjs'
 import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
 import { toM3U, toJSPF } from './lib/playlistWrite.mjs'
 import { removeTrack as removeTrackPure, moveTrack as moveTrackPure } from './lib/playlistEdit.mjs'
@@ -653,7 +654,7 @@ class Engine {
 
   load(i) {
     if (i < 0 || i >= this.playlist.length) return
-    this.allNotesOff()
+    this.resetAll()
     this.index = i
     try {
       const r = buildEventList(this.playlist[i].path)
@@ -678,7 +679,7 @@ class Engine {
   }
   pause() {
     this.playing = false
-    this.allNotesOff()
+    this.resetAll()
     this.broadcast({ type: 'reset' })
     this.broadcastState()
   }
@@ -686,7 +687,7 @@ class Engine {
     this.playing = false
     this.evIndex = 0
     this.elapsed = 0
-    this.allNotesOff()
+    this.resetAll()
     this.broadcast({ type: 'reset' })
     this.broadcastState()
   }
@@ -727,6 +728,15 @@ class Engine {
     for (let c = 0; c < 16; c++) {
       this.out.send('cc', { controller: 120, value: 0, channel: c })
       this.out.send('cc', { controller: 123, value: 0, channel: c })
+    }
+  }
+
+  // Full GM-style reset so controller state (mod wheel, pitch bend, sustain, expression,
+  // volume, pan, program) can't bleed from one track into the next in album/playlist mode.
+  resetAll() {
+    if (!this.out) return
+    for (const { type, data } of buildControllerResetMessages()) {
+      this.out.send(type, data)
     }
   }
 
