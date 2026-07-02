@@ -15,6 +15,7 @@
   "dependencies": {
     "@tonejs/midi": "^2.0.28",
     "audify": "^1.10.1",
+    "basic-ftp": "^6.0.1",
     "easymidi": "^3.1.0",
     "lowdb": "^7.0.1",
     "obs-websocket-js": "^5.0.8",
