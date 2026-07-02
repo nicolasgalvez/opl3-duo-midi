@@ -27,6 +27,8 @@ import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
 import { toM3U, toJSPF } from './lib/playlistWrite.mjs'
 import { removeTrack as removeTrackPure, moveTrack as moveTrackPure } from './lib/playlistEdit.mjs'
 import { openLibrary } from './lib/library.mjs'
+import { openQueue } from './lib/queue.mjs'
+import { applyRenderOptions, extractRenderArgs, serializeRenderArgs } from './lib/renderOptions.mjs'
 import { UdpMidiOutput, DEFAULT_MIDI_UDP_PORT } from './lib/net/udpMidiOutput.mjs'
 import { resolveNetTarget } from './lib/net/deviceTarget.mjs'
 import { Mt32Pi, MT32_ROM_SETS, MT32_SYNTHS, MT32_DEFAULT_TEST_CHANNEL } from './lib/net/mt32pi.mjs'
@@ -57,6 +59,7 @@ import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import { spawn, execSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import readline from 'node:readline'
 import easymidi from 'easymidi'
 import toneMidiPkg from '@tonejs/midi'
@@ -1801,6 +1804,80 @@ async function cmdRender(argv) {
 }
 
 // --------------------------------------------------------------------------
+//  opl queue — a JSON-backed render job queue. `run` spawns a fresh `opl
+//  render` child per job (rather than calling cmdRender in-process) so each
+//  job gets its own process boundary and cmdRender's internal process.exit()
+//  calls just end that job, not the queue runner.
+// --------------------------------------------------------------------------
+function queueDbPath() {
+  return process.env.OPL_QUEUE_DB || join(MIDI_TOOL_DIR, '.opl-queue.json')
+}
+
+async function cmdQueueAdd(argv) {
+  const paths = argv.paths || []
+  if (paths.length === 0) {
+    console.error('No files specified. Usage: opl queue add <file.mid | folder> [render options]')
+    process.exit(1)
+  }
+  const queue = await openQueue(queueDbPath())
+  const job = await queue.add({ paths, args: extractRenderArgs(argv) })
+  console.log(`Queued #${job.id}: ${job.label}`)
+}
+
+async function cmdQueueList() {
+  const queue = await openQueue(queueDbPath())
+  const jobs = queue.list()
+  if (jobs.length === 0) {
+    console.log('Queue is empty.')
+    return
+  }
+  for (const job of jobs) {
+    const flags = serializeRenderArgs(job.args).join(' ')
+    console.log(`  #${job.id} [${job.status}] ${job.label}${flags ? '  ' + flags : ''}`)
+  }
+}
+
+async function cmdQueueRemove(argv) {
+  const queue = await openQueue(queueDbPath())
+  const removed = await queue.remove(argv.id)
+  console.log(removed ? `Removed #${argv.id}.` : `No job #${argv.id} found.`)
+}
+
+async function cmdQueueRun(argv) {
+  const queue = await openQueue(queueDbPath())
+  const scriptPath = fileURLToPath(import.meta.url)
+  console.log(`Queue runner started${argv.watch ? ' (--watch)' : ''}.`)
+
+  while (true) {
+    await queue.refresh() // pick up jobs added by a separate `opl queue add` process
+    const job = queue.nextPending()
+    if (!job) {
+      if (!argv.watch) break
+      await sleep(5000)
+      continue
+    }
+
+    console.log(`\n[#${job.id}] rendering: ${job.label}`)
+    await queue.setStatus(job.id, 'running', { startedAt: new Date().toISOString() })
+    const flags = serializeRenderArgs(job.args)
+    const code = await new Promise((resolveExit) => {
+      const child = spawn(process.execPath, [scriptPath, 'render', ...job.paths, ...flags], { stdio: 'inherit' })
+      child.on('close', resolveExit)
+      child.on('error', () => resolveExit(-1))
+    })
+
+    if (code === 0) {
+      await queue.setStatus(job.id, 'done', { finishedAt: new Date().toISOString() })
+      console.log(`[#${job.id}] done: ${job.label}`)
+    } else {
+      await queue.setStatus(job.id, 'failed', { finishedAt: new Date().toISOString(), error: `exit code ${code}` })
+      console.error(`[#${job.id}] FAILED (exit ${code}): ${job.label}`)
+    }
+  }
+  console.log('Queue empty. Exiting.')
+}
+
+// --------------------------------------------------------------------------
 yargs(hideBin(process.argv))
   .scriptName('opl')
   .usage('$0 <command> [options]')
@@ -1917,85 +1994,40 @@ yargs(hideBin(process.argv))
   .command(
     'render [paths..]',
     'render MIDI file(s) or folder to video (headless)',
+    (y) => applyRenderOptions(y.positional('paths', { type: 'string', describe: '.mid file(s) or folder(s)' })),
+    cmdRender,
+  )
+  .command(
+    'queue <subcommand>',
+    'queue up render jobs (JSON-backed) to run sequentially, one at a time',
     (y) =>
       y
-        .positional('paths', { type: 'string', describe: '.mid file(s) or folder(s)' })
-        .option('recursive', { alias: 'r', type: 'boolean', default: false, describe: 'recurse into subfolders' })
-        .option('album', { type: 'boolean', default: false, describe: 'render all tracks as one continuous video' })
-        .option('audio-device', { type: 'string', describe: 'audio input device name (use --list-audio to see)' })
-        .option('audio-channels', {
-          type: 'string',
-          describe: 'capture only these two 1-based input channels as stereo, e.g. "7,8"',
-        })
-        .option('audio-rate', {
-          type: 'number',
-          describe: 'audio sample rate (default 48000; match your interface, e.g. 44100)',
-        })
-        .option('output', { alias: 'o', type: 'string', describe: 'output video file (.mp4)' })
-        .option('ratio', {
-          type: 'string',
-          default: '16:9',
-          choices: ['16:9', '9:16', '1:1', '4:5'],
-          describe: 'aspect ratio preset (ignored when --platform/--aspect or --resolution is set)',
-        })
-        .option('platform', {
-          type: 'string',
-          choices: ['youtube', 'instagram'],
-          describe: 'social video platform preset (use with --aspect)',
-        })
-        .option('aspect', {
-          type: 'string',
-          choices: ['landscape', 'portrait', 'square', 'story'],
-          describe: 'platform aspect: youtube landscape/portrait; instagram square/portrait/story',
-        })
-        .option('resolution', {
-          type: 'string',
-          describe: 'custom resolution WxH (overrides --platform/--aspect and --ratio)',
-        })
-        .option('art', { type: 'string', describe: 'path to album art image' })
-        .option('tail', { type: 'number', default: 3, describe: 'seconds of tail after last note (default: 3)' })
-        .option('device', { type: 'string', describe: 'MIDI output device name substring' })
-        .option('port', { type: 'number', describe: 'HTTP port for internal server (default: random)' })
-        .option('fps', { type: 'number', default: 30, describe: 'output video framerate' })
-        .option('keep-temps', { type: 'boolean', default: false, describe: 'keep temp files (video.webm, audio.wav)' })
-        .option('list-audio', { type: 'boolean', default: false, describe: 'list audio input devices and exit' })
-        .option('theme', { type: 'string', describe: 'visualizer theme: green (default) or winamp' })
-        .option('title', {
-          type: 'string',
-          describe: 'app title shown in the visualizer (default "OPL · MIDI PLAYER")',
-        })
-        .option('layout', {
-          type: 'string',
-          choices: ['normal', 'minimized', 'overlay'],
-          describe: 'display layout: normal, minimized (hide playlist, large title), or overlay (OBS transparent)',
-        })
-        .option('obs', {
-          type: 'boolean',
-          default: false,
-          describe: 'capture video from a running OBS session (WebSocket) instead of headless Playwright',
-        })
-        .option('obs-url', {
-          type: 'string',
-          describe: 'OBS WebSocket URL (default ws://127.0.0.1:4455, or OPL_OBS_URL in .env)',
-        })
-        .option('obs-password', {
-          type: 'string',
-          describe: 'OBS WebSocket password (or OPL_OBS_PASSWORD in .env)',
-        })
-        .option('obs-source', {
-          type: 'string',
-          describe: 'OBS browser source name to point at the visualizer (or OPL_OBS_SOURCE in .env)',
-        })
-        .option('av-offset', {
-          type: 'number',
-          describe: 'A/V sync tweak in ms at mux (+ delays audio, − delays video; or OPL_AV_OFFSET)',
-        })
-        .option('browser-path', {
-          type: 'string',
-          describe:
-            "path to an installed Chromium/Chrome executable to drive instead of downloading one (or OPL_BROWSER_PATH). Use when Playwright's bundled browser won't launch on this OS (e.g. macOS < 14).",
-        }),
-    cmdRender,
+        .command(
+          'add [paths..]',
+          'add a render job to the queue (accepts every `opl render` option)',
+          (yy) => applyRenderOptions(yy.positional('paths', { type: 'string', describe: '.mid file(s) or folder(s)' })),
+          cmdQueueAdd,
+        )
+        .command('list', 'list queued jobs', () => {}, cmdQueueList)
+        .command(
+          'remove <id>',
+          'remove a queued job by id',
+          (yy) => yy.positional('id', { type: 'number', describe: 'job id, from `opl queue list`' }),
+          cmdQueueRemove,
+        )
+        .command(
+          'run',
+          'process pending jobs one at a time, spawning `opl render` for each',
+          (yy) =>
+            yy.option('watch', {
+              type: 'boolean',
+              default: false,
+              describe: 'keep polling for newly-added jobs instead of exiting once the queue is empty',
+            }),
+          cmdQueueRun,
+        )
+        .demandCommand(1, 'Pick a queue subcommand (try --help).'),
+    () => {},
   )
   .command(
     'mt32 <subcommand>',
