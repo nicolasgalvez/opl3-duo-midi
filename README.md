@@ -68,6 +68,7 @@ opl serve "<folder>" -r                    # web visualizer (below)
 opl serve "<folder>" -r --layout minimized # hide playlist, large scrolling title
 opl serve "<folder>" -r --layout overlay   # transparent OBS overlay
 opl render song.mid                        # headless video render (below)
+opl queue add "<folder>" --album --obs     # queue render jobs to run one after another (below)
 opl panic                                  # silence stuck notes
 ```
 
@@ -317,6 +318,28 @@ and audio into the final MP4.
 capture it, route the line-out into your computer's audio interface and use a
 loopback device (BlackHole on macOS, PulseAudio monitor source on Linux) or an
 aggregate device that includes the interface input.
+
+### Render queue (`opl queue`)
+
+Queue up several `opl render` jobs to run one after another — handy for rendering a
+stack of albums unattended (e.g. overnight). Every `opl render` option is accepted by
+`queue add`, exactly as if you'd typed it on `opl render` itself:
+
+```bash
+opl queue add "Loom (1990)" --album --obs --host 192.168.1.121 -o loom.mp4
+opl queue add "King's Quest 5 (1990)" --album --obs --host 192.168.1.121 -o kq5.mp4
+opl queue list                 # see what's queued, with status: pending/running/done/failed
+opl queue remove 2              # drop a job by id before it runs
+opl queue run                   # process pending jobs one at a time, in order, then exit
+opl queue run --watch           # same, but keep polling for jobs added later instead of exiting
+```
+
+Each job spawns its own `opl render` process (so a crash in one render can't take
+the queue down) and waits for it to finish before starting the next. With `--watch`,
+run it in one terminal and `opl queue add` more jobs from another — the runner picks
+them up on its next poll (every 5s) without needing a restart. Queue state is a small
+JSON file (`.opl-queue.json` by default; override with `OPL_QUEUE_DB`), so `opl queue
+list` works from any terminal and the queue survives a runner restart.
 
 ### MIDI library base path + device defaults (`.env`)
 
