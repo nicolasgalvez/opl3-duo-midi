@@ -28,11 +28,21 @@ PatchDisplay display;
 // ---- usbMIDI trampolines (usbMIDI wants plain function pointers) ----------
 static void onNoteOn(byte ch, byte note, byte vel) { synth.noteOn(ch, note, vel); }
 static void onNoteOff(byte ch, byte note, byte vel) { synth.noteOff(ch, note, vel); }
-static void onProgramChange(byte ch, byte program) { synth.programChange(ch, program); }
+static void onProgramChange(byte ch, byte program) {
+  synth.programChange(ch, program);
+  if ((ch % 16) == cfg::ENC_TARGET_CHANNEL) {
+    patchEncoder.setValue(program);
+    display.show(program, gmInstrumentName(program));
+  }
+}
 static void onControlChange(byte ch, byte ctrl, byte val) { synth.controlChange(ch, ctrl, val); }
 static void onPitchChange(byte ch, int pitch) { synth.pitchChange(ch, pitch); }
 static void onAfterTouch(byte ch, byte pressure) { synth.afterTouch(ch, pressure); }
-static void onSystemReset() { synth.systemReset(); }
+static void onSystemReset() {
+  synth.systemReset();
+  patchEncoder.setValue(synth.program(cfg::ENC_TARGET_CHANNEL));
+  display.show(patchEncoder.value(), gmInstrumentName(patchEncoder.value()));
+}
 
 void setup() {
   usbMIDI.setHandleNoteOn(onNoteOn);
