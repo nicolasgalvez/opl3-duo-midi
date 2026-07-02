@@ -27,6 +27,17 @@ import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
 import { toM3U, toJSPF } from './lib/playlistWrite.mjs'
 import { removeTrack as removeTrackPure, moveTrack as moveTrackPure } from './lib/playlistEdit.mjs'
 import { openLibrary } from './lib/library.mjs'
+import { UdpMidiOutput, DEFAULT_MIDI_UDP_PORT } from './lib/net/udpMidiOutput.mjs'
+import { resolveNetTarget } from './lib/net/deviceTarget.mjs'
+import { Mt32Pi, MT32_ROM_SETS, MT32_SYNTHS, MT32_DEFAULT_TEST_CHANNEL } from './lib/net/mt32pi.mjs'
+import {
+  listSoundFonts,
+  resolveSoundFontIndex,
+  uploadSoundFont,
+  DEFAULT_FTP_PORT,
+  DEFAULT_FTP_USER,
+  DEFAULT_FTP_PASSWORD,
+} from './lib/net/mt32piFtp.mjs'
 import { resolveConfig, validateConfig } from './lib/config.mjs'
 import { resolveLayout } from './lib/layout.mjs'
 import { resolveDimensions } from './lib/presets.mjs'
@@ -209,8 +220,10 @@ function resolvePort(requested) {
   return names[0]
 }
 
-function openOutput(requested) {
-  const name = resolvePort(requested)
+function openOutput(argv) {
+  const net = resolveNetTarget(argv)
+  if (net) return { out: new UdpMidiOutput(net.host, net.port), name: `net://${net.host}:${net.port}` }
+  const name = resolvePort(argv.port)
   return { out: new easymidi.Output(name), name }
 }
 
@@ -229,7 +242,7 @@ function cmdList() {
 }
 
 async function cmdNote(argv) {
-  const { out, name } = openOutput(argv.port)
+  const { out, name } = openOutput(argv)
   const ch = argv.ch - 1
   out.send('noteon', { note: argv.note, velocity: argv.vel, channel: ch })
   console.log(`${name}: note ${argv.note} ch${argv.ch} vel${argv.vel} for ${argv.dur}s`)
@@ -239,7 +252,7 @@ async function cmdNote(argv) {
 }
 
 async function cmdChord(argv) {
-  const { out, name } = openOutput(argv.port)
+  const { out, name } = openOutput(argv)
   const ch = argv.ch - 1
   for (const n of argv.notes) out.send('noteon', { note: n, velocity: argv.vel, channel: ch })
   console.log(`${name}: chord ${argv.notes.join(' ')} ch${argv.ch} for ${argv.dur}s`)
@@ -249,7 +262,7 @@ async function cmdChord(argv) {
 }
 
 async function cmdScale(argv) {
-  const { out, name } = openOutput(argv.port)
+  const { out, name } = openOutput(argv)
   const ch = argv.ch - 1
   const scale = [0, 2, 4, 5, 7, 9, 11, 12].map((s) => argv.root + s)
   console.log(`${name}: scale from ${argv.root} ch${argv.ch}`)
@@ -262,7 +275,7 @@ async function cmdScale(argv) {
 }
 
 function cmdPc(argv) {
-  const { out, name } = openOutput(argv.port)
+  const { out, name } = openOutput(argv)
   out.send('program', { number: argv.program, channel: argv.ch - 1 })
   const label = GM_NAMES[argv.program] ?? '?'
   console.log(`${name}: program change ch${argv.ch} -> ${argv.program} (${label})`)
@@ -270,16 +283,145 @@ function cmdPc(argv) {
 }
 
 function cmdCc(argv) {
-  const { out, name } = openOutput(argv.port)
+  const { out, name } = openOutput(argv)
   out.send('cc', { controller: argv.number, value: argv.value, channel: argv.ch - 1 })
   console.log(`${name}: cc ${argv.number} = ${argv.value} ch${argv.ch}`)
   out.close()
 }
 
 function cmdPanic(argv) {
-  const { out, name } = openOutput(argv.port)
+  const { out, name } = openOutput(argv)
   allNotesOff(out)
   console.log(`${name}: panic — all sound/notes off`)
+  out.close()
+}
+
+// --------------------------------------------------------------------------
+//  mt32-pi device control (isolated module: custom SysEx + FTP SoundFonts)
+// --------------------------------------------------------------------------
+function requireMt32Target(argv) {
+  const net = resolveNetTarget(argv)
+  if (!net) {
+    console.error('mt32 commands need a network target: pass --host <ip> (or set OPL_MIDI_HOST).')
+    process.exit(1)
+  }
+  return net
+}
+
+function mt32Device(net) {
+  return new Mt32Pi(new UdpMidiOutput(net.host, net.port))
+}
+
+function mt32FtpOpts(argv, net) {
+  return {
+    host: net.host,
+    port: Number(argv.ftpPort || process.env.MT32PI_FTP_PORT || DEFAULT_FTP_PORT),
+    user: argv.ftpUser || process.env.MT32PI_FTP_USER || DEFAULT_FTP_USER,
+    password: argv.ftpPassword || process.env.MT32PI_FTP_PASSWORD || DEFAULT_FTP_PASSWORD,
+    disk: argv.disk || 'sd',
+  }
+}
+
+function addMt32FtpOptions(y) {
+  return y
+    .option('ftp-port', { type: 'number', describe: `FTP port (default ${DEFAULT_FTP_PORT}; or MT32PI_FTP_PORT)` })
+    .option('ftp-user', {
+      type: 'string',
+      describe: `FTP username (default "${DEFAULT_FTP_USER}"; or MT32PI_FTP_USER)`,
+    })
+    .option('ftp-password', {
+      type: 'string',
+      describe: `FTP password (default "${DEFAULT_FTP_PASSWORD}"; or MT32PI_FTP_PASSWORD)`,
+    })
+    .option('disk', {
+      type: 'string',
+      choices: ['sd', 'usb'],
+      default: 'sd',
+      describe: 'storage volume containing /soundfonts',
+    })
+}
+
+function cmdMt32Reboot(argv) {
+  const net = requireMt32Target(argv)
+  const device = mt32Device(net)
+  device.reboot()
+  console.log(`net://${net.host}:${net.port}: reboot`)
+  device.out.close()
+}
+
+function cmdMt32Rom(argv) {
+  const net = requireMt32Target(argv)
+  const device = mt32Device(net)
+  device.switchRomSet(argv.romSet)
+  console.log(`net://${net.host}:${net.port}: switch MT-32 ROM set -> ${argv.romSet}`)
+  device.out.close()
+}
+
+function cmdMt32Synth(argv) {
+  const net = requireMt32Target(argv)
+  const device = mt32Device(net)
+  device.switchSynth(argv.synth)
+  console.log(`net://${net.host}:${net.port}: switch synth -> ${argv.synth}`)
+  device.out.close()
+}
+
+function cmdMt32Stereo(argv) {
+  const net = requireMt32Target(argv)
+  const device = mt32Device(net)
+  device.setReversedStereo(argv.state === 'on')
+  console.log(`net://${net.host}:${net.port}: reversed stereo -> ${argv.state}`)
+  device.out.close()
+}
+
+async function cmdMt32SoundFonts(argv) {
+  const net = requireMt32Target(argv)
+  const names = await listSoundFonts(mt32FtpOpts(argv, net))
+  if (names.length === 0) {
+    console.log('No SoundFonts found.')
+    return
+  }
+  names.forEach((n, i) => console.log(`  [${i}] ${n}`))
+}
+
+async function cmdMt32SoundFont(argv) {
+  const net = requireMt32Target(argv)
+  let index
+  try {
+    index = await resolveSoundFontIndex(mt32FtpOpts(argv, net), argv.nameOrIndex)
+  } catch (e) {
+    console.error(e.message)
+    process.exit(1)
+  }
+  const device = mt32Device(net)
+  device.switchSoundFont(index)
+  console.log(`net://${net.host}:${net.port}: switch SoundFont -> [${index}] ${argv.nameOrIndex}`)
+  device.out.close()
+}
+
+async function cmdMt32Upload(argv) {
+  const net = requireMt32Target(argv)
+  const ftpOpts = mt32FtpOpts(argv, net)
+  try {
+    statSync(argv.file)
+  } catch {
+    console.error(`File not found: ${argv.file}`)
+    process.exit(1)
+  }
+  await uploadSoundFont(ftpOpts, argv.file)
+  console.log(`Uploaded ${basename(argv.file)} -> ${net.host}:${ftpOpts.disk.toUpperCase()}/soundfonts`)
+}
+
+async function cmdMt32Test(argv) {
+  const net = requireMt32Target(argv)
+  const out = new UdpMidiOutput(net.host, net.port)
+  const ch = argv.ch - 1
+  console.log(
+    `net://${net.host}:${net.port}: MT-32 test note, ch${argv.ch} for ${argv.dur}s ` +
+      '(MT-32 mode only sounds on melodic channels 2-9 — channel 1 is silent)',
+  )
+  out.send('noteon', { note: 60, velocity: 100, channel: ch })
+  await sleep(argv.dur * 1000)
+  out.send('noteoff', { note: 60, velocity: 0, channel: ch })
   out.close()
 }
 
@@ -451,7 +593,7 @@ async function cmdPlay(argv) {
   }
   if (argv.shuffle) files.sort(() => Math.random() - 0.5)
 
-  const { out, name } = openOutput(argv.port)
+  const { out, name } = openOutput(argv)
   const keys = makeKeys()
   console.log(
     `${name}: ${files.length} track(s).` +
@@ -629,22 +771,34 @@ class Engine {
     this.broadcastState()
   }
 
-  selectDevice(name) {
-    if (this.out) {
-      try {
-        this.allNotesOff()
-        this.out.close()
-      } catch {
-        /* ignore */
-      }
-      this.out = null
+  _closeOutput() {
+    if (!this.out) return
+    try {
+      this.allNotesOff()
+      this.out.close()
+    } catch {
+      /* ignore */
     }
+    this.out = null
+  }
+
+  selectDevice(name) {
+    this._closeOutput()
     const outs = midiOutputs()
     const found = outs.find((n) => n === name) || outs.find((n) => n.toLowerCase().includes((name || '').toLowerCase()))
     if (found) {
       this.out = new easymidi.Output(found)
       this.deviceName = found
     }
+    this.broadcastState()
+  }
+
+  // Network alternative to selectDevice() — targets a wifi-MIDI receiver (e.g.
+  // an mt32-pi) over UDP instead of a USB port.
+  selectNetworkDevice(host, port) {
+    this._closeOutput()
+    this.out = new UdpMidiOutput(host, port)
+    this.deviceName = this.out.name
     this.broadcastState()
   }
 
@@ -1037,8 +1191,13 @@ async function cmdServe(argv) {
   engine.setPlaylist(files)
   engine.repeat = !!(argv.repeat || argv.loop || process.env.OPL_REPEAT === '1' || process.env.OPL_REPEAT === 'true')
   engine.setShuffle(!!(argv.shuffle || process.env.OPL_SHUFFLE === '1' || process.env.OPL_SHUFFLE === 'true'))
-  const outs = midiOutputs()
-  if (outs.length) engine.selectDevice(outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0])
+  const netTarget = resolveNetTarget(argv)
+  if (netTarget) {
+    engine.selectNetworkDevice(netTarget.host, netTarget.port)
+  } else {
+    const outs = midiOutputs()
+    if (outs.length) engine.selectDevice(outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0])
+  }
   if (files.length) engine.load(0)
 
   const dbPath = process.env.OPL_LIBRARY_DB || join(MIDI_TOOL_DIR, '.opl-library.json')
@@ -1179,15 +1338,19 @@ async function resolveRenderOpts(argv) {
   const audioChannels = argv.audioChannels || process.env.OPL_AUDIO_CHANNELS || null
   const audioRate = Number(argv.audioRate || process.env.OPL_AUDIO_RATE || 48000)
 
-  const outs = midiOutputs()
-  if (outs.length === 0) {
-    console.error('No MIDI output ports found.')
-    process.exit(1)
+  const netTarget = resolveNetTarget(argv)
+  let devName = null
+  if (!netTarget) {
+    const outs = midiOutputs()
+    if (outs.length === 0) {
+      console.error('No MIDI output ports found. Use --host to target a network MIDI device instead.')
+      process.exit(1)
+    }
+    const midiMatch = argv.device || process.env.OPL_MIDI_DEVICE
+    devName = midiMatch
+      ? outs.find((n) => n === midiMatch) || outs.find((n) => n.toLowerCase().includes(midiMatch.toLowerCase()))
+      : outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0]
   }
-  const midiMatch = argv.device || process.env.OPL_MIDI_DEVICE
-  const devName = midiMatch
-    ? outs.find((n) => n === midiMatch) || outs.find((n) => n.toLowerCase().includes(midiMatch.toLowerCase()))
-    : outs.find((n) => n.toLowerCase().includes('opl3')) || outs[0]
 
   let chromium = null
   const browserPath = argv.browserPath || process.env.OPL_BROWSER_PATH || null
@@ -1204,7 +1367,7 @@ async function resolveRenderOpts(argv) {
 
   const obsOpts = argv.obs ? resolveObsOpts(argv) : null
 
-  return { dims, audioDevice, audioChannels, audioRate, devName, chromium, browserPath, obsOpts }
+  return { dims, audioDevice, audioChannels, audioRate, devName, netTarget, chromium, browserPath, obsOpts }
 }
 
 function createRenderCleanup(engine, server) {
@@ -1238,7 +1401,7 @@ function createRenderCleanup(engine, server) {
   }
 }
 
-async function setupRenderEngine({ playlist, singleMode, argv, devName, port }) {
+async function setupRenderEngine({ playlist, singleMode, argv, devName, netTarget, port }) {
   const engine = new Engine()
   engine.single = singleMode
   engine.repeat = false
@@ -1267,7 +1430,8 @@ async function setupRenderEngine({ playlist, singleMode, argv, devName, port }) 
       process.exit(1)
     }
   }
-  if (devName) engine.selectDevice(devName)
+  if (netTarget) engine.selectNetworkDevice(netTarget.host, netTarget.port)
+  else if (devName) engine.selectDevice(devName)
   engine.load(0)
 
   const httpPort = port ?? (argv.port || (await getFreePort()))
@@ -1287,9 +1451,10 @@ async function muxVideoAudio({ videoFile, audioFile, outPath, fps, avOffsetMs = 
 
 // One full render pipeline: engine + server + OBS recording + ffmpeg audio + mux.
 async function renderSessionObs({ playlist, singleMode, totalDuration, outPath, label, argv, opts }) {
-  const { dims, audioDevice, audioChannels, audioRate, devName, obsOpts } = opts
+  const { dims, audioDevice, audioChannels, audioRate, devName, netTarget, obsOpts } = opts
+  const midiLabel = netTarget ? `net://${netTarget.host}:${netTarget.port}` : devName
 
-  const { engine, server, httpPort } = await setupRenderEngine({ playlist, singleMode, argv, devName })
+  const { engine, server, httpPort } = await setupRenderEngine({ playlist, singleMode, argv, devName, netTarget })
   const cleanup = createRenderCleanup(engine, server)
   const tmpDir = mkdtempSync(join(os.tmpdir(), 'opl-render-'))
   const audioFile = join(tmpDir, 'audio.wav')
@@ -1307,7 +1472,7 @@ async function renderSessionObs({ playlist, singleMode, totalDuration, outPath, 
 
   console.log(`\nRendering (OBS): ${label}  (${totalDuration.toFixed(1)}s)`)
   console.log(
-    `Resolution: ${dims.w}x${dims.h}  Audio: ${audioDevice}${audioChannels ? ` ch${audioChannels}` : ''} @ ${audioRate}Hz  MIDI: ${devName}`,
+    `Resolution: ${dims.w}x${dims.h}  Audio: ${audioDevice}${audioChannels ? ` ch${audioChannels}` : ''} @ ${audioRate}Hz  MIDI: ${midiLabel}`,
   )
   console.log(`OBS: ${info.obsWebSocketVersion || 'connected'} @ ${obsOpts.url}`)
   console.log(`Visualizer: ${pageUrl}`)
@@ -1435,16 +1600,17 @@ async function renderSession({ playlist, singleMode, totalDuration, outPath, lab
     return renderSessionObs({ playlist, singleMode, totalDuration, outPath, label, argv, opts })
   }
 
-  const { dims, audioDevice, audioChannels, audioRate, devName, chromium, browserPath } = opts
+  const { dims, audioDevice, audioChannels, audioRate, devName, netTarget, chromium, browserPath } = opts
+  const midiLabel = netTarget ? `net://${netTarget.host}:${netTarget.port}` : devName
 
-  const { engine, server, httpPort } = await setupRenderEngine({ playlist, singleMode, argv, devName })
+  const { engine, server, httpPort } = await setupRenderEngine({ playlist, singleMode, argv, devName, netTarget })
   const cleanup = createRenderCleanup(engine, server)
   const tmpDir = mkdtempSync(join(os.tmpdir(), 'opl-render-'))
   const audioFile = join(tmpDir, 'audio.wav')
 
   console.log(`\nRendering: ${label}  (${totalDuration.toFixed(1)}s)`)
   console.log(
-    `Resolution: ${dims.w}x${dims.h}  Audio: ${audioDevice}${audioChannels ? ` ch${audioChannels}` : ''} @ ${audioRate}Hz  MIDI: ${devName}`,
+    `Resolution: ${dims.w}x${dims.h}  Audio: ${audioDevice}${audioChannels ? ` ch${audioChannels}` : ''} @ ${audioRate}Hz  MIDI: ${midiLabel}`,
   )
 
   let browser
@@ -1639,6 +1805,14 @@ yargs(hideBin(process.argv))
   .scriptName('opl')
   .usage('$0 <command> [options]')
   .option('port', { type: 'string', describe: 'output port name substring (default: OPL3Duo)' })
+  .option('host', {
+    type: 'string',
+    describe: 'send MIDI over UDP to this network host instead of USB (e.g. an mt32-pi; or OPL_MIDI_HOST)',
+  })
+  .option('net-port', {
+    type: 'number',
+    describe: `UDP port for --host (default ${DEFAULT_MIDI_UDP_PORT}; or OPL_MIDI_PORT)`,
+  })
   .command('list', 'list MIDI output ports', () => {}, cmdList)
   .command(
     'note <note>',
@@ -1822,6 +1996,64 @@ yargs(hideBin(process.argv))
             "path to an installed Chromium/Chrome executable to drive instead of downloading one (or OPL_BROWSER_PATH). Use when Playwright's bundled browser won't launch on this OS (e.g. macOS < 14).",
         }),
     cmdRender,
+  )
+  .command(
+    'mt32 <subcommand>',
+    'mt32-pi device control (custom SysEx + FTP SoundFont management)',
+    (y) =>
+      y
+        .command('reboot', 'reboot the mt32-pi', () => {}, cmdMt32Reboot)
+        .command(
+          'rom <romSet>',
+          'switch MT-32 ROM set',
+          (yy) => yy.positional('romSet', { type: 'string', choices: Object.keys(MT32_ROM_SETS) }),
+          cmdMt32Rom,
+        )
+        .command(
+          'synth <synth>',
+          'switch synth mode (mt32 or soundfont)',
+          (yy) => yy.positional('synth', { type: 'string', choices: Object.keys(MT32_SYNTHS) }),
+          cmdMt32Synth,
+        )
+        .command(
+          'stereo <state>',
+          'set reversed stereo output',
+          (yy) => yy.positional('state', { type: 'string', choices: ['on', 'off'] }),
+          cmdMt32Stereo,
+        )
+        .command(
+          'soundfonts',
+          "list SoundFonts on the device's storage (via FTP)",
+          addMt32FtpOptions,
+          cmdMt32SoundFonts,
+        )
+        .command(
+          'soundfont <nameOrIndex>',
+          'switch SoundFont by name (substring match) or index',
+          (yy) => addMt32FtpOptions(yy.positional('nameOrIndex', { type: 'string' })),
+          cmdMt32SoundFont,
+        )
+        .command(
+          'upload <file>',
+          'upload a .sf2/.sf3 SoundFont file to the device (via FTP)',
+          (yy) => addMt32FtpOptions(yy.positional('file', { type: 'string' })),
+          cmdMt32Upload,
+        )
+        .command(
+          'test',
+          'send a quick test note (defaults to MT-32 channel 2 — channel 1 is silent in MT-32 mode)',
+          (yy) =>
+            yy
+              .option('ch', {
+                type: 'number',
+                default: MT32_DEFAULT_TEST_CHANNEL,
+                describe: 'MIDI channel 1-16 (MT-32 melodic parts live on channels 2-9)',
+              })
+              .option('dur', { type: 'number', default: 1, describe: 'seconds' }),
+          cmdMt32Test,
+        )
+        .demandCommand(1, 'Pick an mt32 subcommand (try --help).'),
+    () => {},
   )
   .demandCommand(1, 'Pick a command (try --help).')
   .strict()
