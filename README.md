@@ -17,6 +17,10 @@ board's stereo line-out.
 - **Rotary encoder** support to change the patch live (+ optional SSD1306 OLED), all configurable
   in `src/Config.h`
 - A clean OOP firmware structure that never blocks the MIDI loop
+- **Network MIDI (WiFi)** — send MIDI over UDP to any wifi-MIDI receiver (e.g. an
+  [mt32-pi](https://github.com/dwhinham/mt32-pi)) instead of USB, from every `opl` command
+- An isolated **mt32-pi module** (`opl mt32 …`) for that device's custom SysEx controls
+  (ROM set / synth mode / SoundFont / reversed stereo) and FTP SoundFont management
 
 ## Hardware / wiring
 
@@ -66,6 +70,52 @@ opl serve "<folder>" -r --layout overlay   # transparent OBS overlay
 opl render song.mid                        # headless video render (below)
 opl panic                                  # silence stuck notes
 ```
+
+### Network MIDI (WiFi) + mt32-pi
+
+Every command above (plus `serve` and `render`, below) can send MIDI over UDP to a
+network device instead of USB — pass `--host` (and optionally `--net-port`, default
+`1999`), or set `OPL_MIDI_HOST` / `OPL_MIDI_PORT` in `.env`. `--host` takes priority
+over `--port`/`--device` and needs no USB MIDI port to exist.
+
+```bash
+opl note 60 --host 192.168.1.121                 # UDP MIDI to port 1999
+opl play song.mid --host 192.168.1.121 --net-port 1999
+opl render song.mid --obs --host 192.168.1.121    # video pipeline targeting a network synth
+```
+
+This raw-UDP transport is generic (any receiver that speaks plain MIDI bytes over
+UDP works), but was built against the [mt32-pi](https://github.com/dwhinham/mt32-pi) —
+a baremetal Raspberry Pi MIDI synth with [network MIDI](https://github.com/dwhinham/mt32-pi/wiki/MIDI-via-the-network)
+and an [embedded FTP server](https://github.com/dwhinham/mt32-pi/wiki/Embedded-FTP-server).
+Its device-specific quirks (custom SysEx controls, SoundFont management, and its
+MT-32-mode channel layout) are isolated in an `opl mt32` command group rather than
+bleeding into the generic commands above:
+
+```bash
+opl mt32 reboot --host 192.168.1.121
+opl mt32 rom cm32l --host 192.168.1.121            # old | new | cm32l | any | all
+opl mt32 synth soundfont --host 192.168.1.121       # mt32 | soundfont
+opl mt32 stereo on --host 192.168.1.121             # on | off
+opl mt32 soundfonts --host 192.168.1.121            # list SoundFonts (FTP), with their index
+opl mt32 soundfont "GeneralUser GS" --host 192.168.1.121  # switch by name (substring) or index
+opl mt32 upload MySoundFont.sf2 --host 192.168.1.121      # upload a .sf2/.sf3 (FTP)
+opl mt32 test --host 192.168.1.121                  # quick note on channel 2 (see below)
+```
+
+FTP defaults to the device's stock `mt32-pi`/`mt32-pi` credentials and the `SD` volume;
+override with `--ftp-user`, `--ftp-password`, `--ftp-port`, `--disk usb`, or the
+`MT32PI_FTP_USER`/`MT32PI_FTP_PASSWORD`/`MT32PI_FTP_PORT` env vars.
+
+**MT-32 mode quirk:** in MT-32 emulation, the device only sounds melodic notes on MIDI
+channels **2-9** (the classic 8 Roland MT-32 parts) — channel 1 is silent, unlike General
+MIDI's channel 1-16 convention (channel 10 is rhythm in both). `opl mt32 test` defaults to
+channel 2 for this reason. Switch to `opl mt32 synth soundfont` for standard GM/GS channel
+1-16 playback (e.g. of ordinary Standard MIDI Files) instead.
+
+Only the raw UDP transport above is implemented; the device's RTP-MIDI/AppleMIDI option
+and network-device selection in the `serve` web UI's device picker are not — use `--host`
+from the CLI for those cases.
 
 ### Playlists
 
@@ -250,6 +300,8 @@ Options:
 | `--tail <seconds>`      | `3`                     | Recording tail after last MIDI note                                     |
 | `--fps <n>`             | `30`                    | Output video framerate                                                  |
 | `--device <name>`       | `OPL_MIDI_DEVICE` env   | MIDI output device substring (auto-detects if unset)                    |
+| `--host <ip>`           | `OPL_MIDI_HOST` env     | Send MIDI over UDP to a network device instead of USB (see above)       |
+| `--net-port <n>`        | `OPL_MIDI_PORT`, `1999` | UDP port for `--host`                                                   |
 | `--keep-temps`          | off                     | Keep intermediate WebM/WAV files                                        |
 | `--list-audio`          | —                       | List audio devices and exit                                             |
 
@@ -304,6 +356,7 @@ src/
   GMNames.h           General MIDI instrument names
   main.cpp            composition root + usbMIDI handlers
 tools/midi/           the `opl` CLI (Node + yargs + easymidi + @tonejs/midi)
+  lib/net/            network MIDI (UDP transport) + the isolated mt32-pi module (SysEx, FTP)
 ```
 
 ## Formatting & linting
