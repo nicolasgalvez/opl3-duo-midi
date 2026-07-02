@@ -146,8 +146,22 @@ void OplSynth::playMelodic(uint8_t midiChannel, uint8_t note, uint8_t velocity) 
 
     note = max(24, min(note, 119));
     uint8_t octave = 1 + (note - 24) / 12;
-    note = note % 12;
-    _opl3.playNote(_opl3.get4OPControlChannel(oplChannelIndex), octave, note);
+    uint8_t noteInOctave = note % 12;
+    uint8_t controlChannel = _opl3.get4OPControlChannel(oplChannelIndex);
+    _opl3.playNote(controlChannel, octave, noteInOctave);
+
+    int pitch = _midi[midiChannel].pitch;
+    if (pitch != 0) {
+      float pitchBend = abs(pitch) / 8192.0;
+      uint8_t baseNote = noteInOctave + 2;
+      if (pitch < 0) {
+        unsigned int fDelta = (notePitches[baseNote] - notePitches[baseNote - 2]) * pitchBend;
+        _opl3.setFNumber(controlChannel, notePitches[baseNote] - fDelta);
+      } else {
+        unsigned int fDelta = (notePitches[baseNote + 2] - notePitches[baseNote]) * pitchBend;
+        _opl3.setFNumber(controlChannel, notePitches[baseNote] + fDelta);
+      }
+    }
   }
 }
 
@@ -356,30 +370,61 @@ void OplSynth::controlChange(uint8_t midiChannel, uint8_t control, uint8_t value
       break;
 
     case CONTROL_RESET_ALL:
-      for (uint8_t i = 0; i < NUM_MIDI_CHANNELS; i++) {
-        _midi[i].volume = log(127.0 * 0.8) / log(127.0);
-        _midi[i].expression = 1.0f;
-        _midi[i].modulation = 0.0f;
-        _midi[i].sustain = false;
+      _midi[midiChannel].volume = log(127.0 * 0.8) / log(127.0);
+      _midi[midiChannel].expression = 1.0f;
+      _midi[midiChannel].modulation = 0.0f;
+      _midi[midiChannel].afterTouch = 0.0f;
+      _midi[midiChannel].sustain = false;
+      _midi[midiChannel].pitch = 0;
+
+      // Physically update active voices on this midi channel
+      for (uint8_t i = 0; i < NUM_MELODIC_CHANNELS; i++) {
+        if (_melodic[i].midiChannel == midiChannel && _melodic[i].note != VALUE_UNDEFINED) {
+          setOplChannelVolume(i, midiChannel);
+        }
+      }
+      pitchChange(midiChannel, 0);
+      break;
+
+    case CONTROL_ALL_SOUND_OFF:
+      if (midiChannel == MIDI_DRUM_CHANNEL) {
+        for (uint8_t i = 0; i < NUM_DRUM_CHANNELS; i++) {
+          _opl3.setRelease(drumChannelsOPL[i], OPERATOR1, 0x0F);
+          _opl3.setRelease(drumChannelsOPL[i], OPERATOR2, 0x0F);
+          _opl3.setKeyOn(drumChannelsOPL[i], false);
+          _drums[i].note = VALUE_UNDEFINED;
+          _drums[i].program = VALUE_UNDEFINED;
+        }
+      } else {
+        for (uint8_t i = 0; i < NUM_MELODIC_CHANNELS; i++) {
+          if (_melodic[i].midiChannel == midiChannel) {
+            uint8_t controlChannel = _opl3.get4OPControlChannel(i);
+            _opl3.setRelease(_opl3.get4OPControlChannel(i, 0), OPERATOR1, 0x0F);
+            _opl3.setRelease(_opl3.get4OPControlChannel(i, 0), OPERATOR2, 0x0F);
+            _opl3.setRelease(_opl3.get4OPControlChannel(i, 1), OPERATOR1, 0x0F);
+            _opl3.setRelease(_opl3.get4OPControlChannel(i, 1), OPERATOR2, 0x0F);
+            _opl3.setKeyOn(controlChannel, false);
+            _melodic[i].note = VALUE_UNDEFINED;
+            _melodic[i].program = VALUE_UNDEFINED;
+            _melodic[i].sustained = false;
+          }
+        }
       }
       break;
 
-    // Immediately silence everything: force the FASTEST release (0x0F) before
-    // key-off so notes cut instantly, then fall through to clear note state.
-    // (Release 0x00 is the *slowest* rate on OPL — using it here is what made
-    // notes hang at the end of a song.)
-    case CONTROL_ALL_SOUND_OFF:
-      for (uint8_t i = 0; i < _opl3.getNumChannels(); i++) {
-        _opl3.setRelease(i, OPERATOR1, 0x0F);
-        _opl3.setRelease(i, OPERATOR2, 0x0F);
-        _opl3.setKeyOn(i, false);
-      }
-      [[fallthrough]];
-
     case CONTROL_ALL_NOTES_OFF:
-      for (uint8_t i = 0; i < NUM_MELODIC_CHANNELS; i++) {
-        if (_melodic[i].note != VALUE_UNDEFINED) {
-          noteOff(_melodic[i].midiChannel, _melodic[i].note, 0);
+      if (midiChannel == MIDI_DRUM_CHANNEL) {
+        for (uint8_t i = 0; i < NUM_DRUM_CHANNELS; i++) {
+          if (_drums[i].note != VALUE_UNDEFINED) {
+            _opl3.setKeyOn(drumChannelsOPL[i], false);
+            _drums[i].note = VALUE_UNDEFINED;
+          }
+        }
+      } else {
+        for (uint8_t i = 0; i < NUM_MELODIC_CHANNELS; i++) {
+          if (_melodic[i].midiChannel == midiChannel && _melodic[i].note != VALUE_UNDEFINED) {
+            noteOff(midiChannel, _melodic[i].note, 0);
+          }
         }
       }
       break;
@@ -391,18 +436,19 @@ void OplSynth::controlChange(uint8_t midiChannel, uint8_t control, uint8_t value
 
 void OplSynth::pitchChange(uint8_t midiChannel, int pitch) {
   midiChannel = midiChannel % NUM_MIDI_CHANNELS;
+  _midi[midiChannel].pitch = pitch;
   float pitchBend = abs(pitch) / 8192.0;
 
   for (uint8_t i = 0; i < NUM_MELODIC_CHANNELS; i++) {
-    if (_melodic[i].midiChannel == midiChannel) {
+    if (_melodic[i].midiChannel == midiChannel && _melodic[i].note != VALUE_UNDEFINED) {
       uint8_t controlChannel = _opl3.get4OPControlChannel(i);
       uint8_t baseNote = (_melodic[i].note % 12) + 2;
 
       if (pitch < 0) {
-        uint8_t fDelta = (notePitches[baseNote] - notePitches[baseNote - 2]) * pitchBend;
+        unsigned int fDelta = (notePitches[baseNote] - notePitches[baseNote - 2]) * pitchBend;
         _opl3.setFNumber(controlChannel, notePitches[baseNote] - fDelta);
       } else if (pitch > 0) {
-        uint8_t fDelta = (notePitches[baseNote + 2] - notePitches[baseNote]) * pitchBend;
+        unsigned int fDelta = (notePitches[baseNote + 2] - notePitches[baseNote]) * pitchBend;
         _opl3.setFNumber(controlChannel, notePitches[baseNote] + fDelta);
       } else {
         _opl3.setFNumber(controlChannel, notePitches[baseNote]);
@@ -435,6 +481,7 @@ void OplSynth::systemReset() {
     _midi[i].modulation = 0.0f;
     _midi[i].afterTouch = 0.0f;
     _midi[i].tAfterTouch = 0;
+    _midi[i].pitch = 0;
     _midi[i].sustain = false;
     _midi[i].panLeft = true;
     _midi[i].panRight = true;
@@ -483,5 +530,12 @@ void OplSynth::panic() {
   for (uint8_t i = 0; i < NUM_DRUM_CHANNELS; i++) {
     _drums[i].note = VALUE_UNDEFINED;
     _drums[i].program = VALUE_UNDEFINED;
+  }
+  // Reset stuck controller states on all MIDI channels.
+  for (uint8_t i = 0; i < NUM_MIDI_CHANNELS; i++) {
+    _midi[i].pitch = 0;
+    _midi[i].modulation = 0.0f;
+    _midi[i].afterTouch = 0.0f;
+    _midi[i].sustain = false;
   }
 }

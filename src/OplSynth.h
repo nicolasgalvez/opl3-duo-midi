@@ -54,6 +54,7 @@ class OplSynth {
     float modulation = 0.0f;  // CC1  mod wheel
     float afterTouch = 0.0f;
     uint32_t tAfterTouch = 0;
+    int pitch = 0;         // pitch bend (-8192..8191)
     bool sustain = false;  // CC64 sustain pedal held
     bool panLeft = true;   // CC10 pan -> OPL3 stereo enable bits
     bool panRight = true;
