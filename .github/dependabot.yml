@@ -9,6 +9,10 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    # Wait a week after a version is published before PRing it -- gives time
+    # for hijacked/malicious releases to be caught and yanked upstream.
+    cooldown:
+      default-days: 7
 
   # The opl CLI (easymidi, @tonejs/midi, audify, yargs, playwright)
   - package-ecosystem: npm
@@ -19,6 +23,8 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: github-actions
     directory: /
@@ -27,3 +33,5 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    cooldown:
+      default-days: 7
