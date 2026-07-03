@@ -1,6 +1,7 @@
 import { GM_NAMES } from '../../core/gm.ts'
 import { midiOutputs } from '../../adapters/midi/outputs.ts'
 import { openOutput, allNotesOff, sleep, type GlobalArgv } from '../shared.ts'
+import { requireMidiByte, requireChannel, requireDuration } from '../args.ts'
 
 export interface NoteArgv extends GlobalArgv {
   note: number
@@ -34,56 +35,75 @@ export interface CcArgv extends GlobalArgv {
   ch: number
 }
 
+const NOTE_HINT = 'a MIDI note number 0-127 (60 = middle C)'
+
 export function cmdList(): void {
   console.log('MIDI outputs:')
   for (const n of midiOutputs()) console.log('  -', n)
 }
 
 export async function cmdNote(argv: NoteArgv): Promise<void> {
+  const note = requireMidiByte('note', argv.note, NOTE_HINT)
+  const vel = requireMidiByte('velocity', argv.vel)
+  const dur = requireDuration(argv.dur)
+  const chArg = requireChannel(argv.ch)
   const { out, name } = openOutput(argv)
-  const ch = argv.ch - 1
-  out.send('noteon', { note: argv.note, velocity: argv.vel, channel: ch })
-  console.log(`${name}: note ${argv.note} ch${argv.ch} vel${argv.vel} for ${argv.dur}s`)
-  await sleep(argv.dur * 1000)
-  out.send('noteoff', { note: argv.note, velocity: 0, channel: ch })
+  const ch = chArg - 1
+  out.send('noteon', { note, velocity: vel, channel: ch })
+  console.log(`${name}: note ${note} ch${chArg} vel${vel} for ${dur}s`)
+  await sleep(dur * 1000)
+  out.send('noteoff', { note, velocity: 0, channel: ch })
   out.close()
 }
 
 export async function cmdChord(argv: ChordArgv): Promise<void> {
+  const notes = argv.notes.map((n) => requireMidiByte('note', n, NOTE_HINT))
+  const vel = requireMidiByte('velocity', argv.vel)
+  const dur = requireDuration(argv.dur)
+  const chArg = requireChannel(argv.ch)
   const { out, name } = openOutput(argv)
-  const ch = argv.ch - 1
-  for (const n of argv.notes) out.send('noteon', { note: n, velocity: argv.vel, channel: ch })
-  console.log(`${name}: chord ${argv.notes.join(' ')} ch${argv.ch} for ${argv.dur}s`)
-  await sleep(argv.dur * 1000)
-  for (const n of argv.notes) out.send('noteoff', { note: n, velocity: 0, channel: ch })
+  const ch = chArg - 1
+  for (const n of notes) out.send('noteon', { note: n, velocity: vel, channel: ch })
+  console.log(`${name}: chord ${notes.join(' ')} ch${chArg} for ${dur}s`)
+  await sleep(dur * 1000)
+  for (const n of notes) out.send('noteoff', { note: n, velocity: 0, channel: ch })
   out.close()
 }
 
 export async function cmdScale(argv: ScaleArgv): Promise<void> {
+  const root = requireMidiByte('root', argv.root, NOTE_HINT)
+  const vel = requireMidiByte('velocity', argv.vel)
+  const dur = requireDuration(argv.dur)
+  const chArg = requireChannel(argv.ch)
   const { out, name } = openOutput(argv)
-  const ch = argv.ch - 1
-  const scale = [0, 2, 4, 5, 7, 9, 11, 12].map((s) => argv.root + s)
-  console.log(`${name}: scale from ${argv.root} ch${argv.ch}`)
+  const ch = chArg - 1
+  const scale = [0, 2, 4, 5, 7, 9, 11, 12].map((s) => root + s)
+  console.log(`${name}: scale from ${root} ch${chArg}`)
   for (const n of scale) {
-    out.send('noteon', { note: n, velocity: argv.vel, channel: ch })
-    await sleep(argv.dur * 1000)
+    out.send('noteon', { note: n, velocity: vel, channel: ch })
+    await sleep(dur * 1000)
     out.send('noteoff', { note: n, velocity: 0, channel: ch })
   }
   out.close()
 }
 
 export function cmdPc(argv: PcArgv): void {
+  const program = requireMidiByte('program', argv.program, 'a GM program 0-127')
+  const chArg = requireChannel(argv.ch)
   const { out, name } = openOutput(argv)
-  out.send('program', { number: argv.program, channel: argv.ch - 1 })
-  const label = GM_NAMES[argv.program] ?? '?'
-  console.log(`${name}: program change ch${argv.ch} -> ${argv.program} (${label})`)
+  out.send('program', { number: program, channel: chArg - 1 })
+  const label = GM_NAMES[program] ?? '?'
+  console.log(`${name}: program change ch${chArg} -> ${program} (${label})`)
   out.close()
 }
 
 export function cmdCc(argv: CcArgv): void {
+  const controller = requireMidiByte('CC number', argv.number)
+  const value = requireMidiByte('CC value', argv.value)
+  const chArg = requireChannel(argv.ch)
   const { out, name } = openOutput(argv)
-  out.send('cc', { controller: argv.number, value: argv.value, channel: argv.ch - 1 })
-  console.log(`${name}: cc ${argv.number} = ${argv.value} ch${argv.ch}`)
+  out.send('cc', { controller, value, channel: chArg - 1 })
+  console.log(`${name}: cc ${controller} = ${value} ch${chArg}`)
   out.close()
 }
 
