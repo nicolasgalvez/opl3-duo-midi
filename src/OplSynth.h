@@ -33,6 +33,11 @@ class OplSynth {
 
   void panic();  // immediate all-sound / all-notes off
 
+  // Raw register write, bypassing GM voice allocation entirely (ODM-15: VGM
+  // playback streams a file's actual OPL register log 1:1). bank selects
+  // (synthUnit << 1) | registerPort, per OPL3Duo::write's own addressing.
+  void rawWrite(uint8_t bank, uint8_t reg, uint8_t value) { _opl3.write(bank, reg, value); }
+
   // Eased left/right output level (0..1), MIDI-derived, for VU LEDs.
   float levelLeft() const { return _vuL; }
   float levelRight() const { return _vuR; }

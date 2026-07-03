@@ -39,11 +39,14 @@ function unwrapRmid(buf, path) {
   throw new Error(`Bad MIDI file${path ? ` ${path}` : ''}. RIFF RMID has no data chunk.`)
 }
 
-export function readMidiData(path) {
-  const buf = readFileSync(path)
-
+/** Extract the standard-MIDI-file bytes from an already-read buffer (unwrapping RIFF RMID if needed). */
+export function extractMidiBuffer(buf, path) {
   if (fourCc(buf, 0) === 'MThd') return buf
   if (fourCc(buf, 0) === 'RIFF') return unwrapRmid(buf, path)
 
   throw new Error(`Bad MIDI file ${path}. Expected MThd or RIFF RMID, got: ${fourCc(buf, 0)}`)
+}
+
+export function readMidiData(path) {
+  return extractMidiBuffer(readFileSync(path), path)
 }
