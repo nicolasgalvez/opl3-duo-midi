@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildControllerResetMessages, buildAllNotesOffMessages, sendMessages } from '../lib/midiReset.mjs'
+import { buildControllerResetMessages, buildAllNotesOffMessages, sendMessages } from '../src/core/midiReset.ts'
 
 test('buildControllerResetMessages covers all 16 channels', () => {
   const messages = buildControllerResetMessages()

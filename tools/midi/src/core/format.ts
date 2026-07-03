@@ -2,17 +2,19 @@
 // a VGM renamed to .mid must still be detected as vgm). Add future formats
 // (IMF/DRO) here as more entries in DETECTORS.
 
-function fourCc(buf, offset) {
+export type TrackFormat = 'midi' | 'vgm'
+
+function fourCc(buf: Buffer, offset: number): string {
   return buf.length >= offset + 4 ? buf.toString('ascii', offset, offset + 4) : ''
 }
 
-const DETECTORS = [
+const DETECTORS: { format: TrackFormat; test: (buf: Buffer) => boolean }[] = [
   { format: 'midi', test: (buf) => fourCc(buf, 0) === 'MThd' || fourCc(buf, 0) === 'RIFF' },
   { format: 'vgm', test: (buf) => fourCc(buf, 0) === 'Vgm ' },
 ]
 
 /** Detect a track's format from its content. Returns null if unrecognized. */
-export function detectFormat(buf) {
+export function detectFormat(buf: Buffer): TrackFormat | null {
   for (const { format, test } of DETECTORS) {
     if (test(buf)) return format
   }

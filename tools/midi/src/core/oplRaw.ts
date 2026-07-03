@@ -1,6 +1,6 @@
 // Raw OPL2/OPL3 register-write SysEx protocol for the OPL3 Duo's own firmware
 // (src/main.cpp onSysEx handler). Unrelated to mt32-pi's device-control SysEx
-// in lib/net/mt32pi.mjs, despite sharing the same manufacturer ID 0x7D (MIDI's
+// in the mt32pi adapter, despite sharing the same manufacturer ID 0x7D (MIDI's
 // non-commercial/educational ID) — different target device, disambiguated by
 // the 0x7F sub-command byte.
 //
@@ -13,7 +13,7 @@
 const MANUFACTURER_ID = 0x7d
 const RAW_WRITE = 0x7f
 
-export function rawWriteSysEx(bank, reg, value) {
+export function rawWriteSysEx(bank: number, reg: number, value: number): number[] {
   return [
     0xf0,
     MANUFACTURER_ID,
@@ -32,6 +32,6 @@ export function rawWriteSysEx(bank, reg, value) {
 // two physical chips [0,1] and registerPort selects the OPL3's register port
 // [0,1] (YMF262 command 0x5E writes port 0, 0x5F writes port 1). We always
 // target synthUnit 0 — routing across both chips is out of scope (ODM-15).
-export function bankForPort(port, synthUnit = 0) {
+export function bankForPort(port: number, synthUnit = 0): number {
   return (synthUnit << 1) | (port & 0x01)
 }

@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseVgmHeader, resolveChip, parseVgmCommands, parseVgm, toFlatEvents } from '../lib/vgm.mjs'
-import { rawWriteSysEx, bankForPort } from '../lib/oplRaw.mjs'
+import { parseVgmHeader, resolveChip, parseVgmCommands, parseVgm, toFlatEvents } from '../src/core/vgm.ts'
+import { rawWriteSysEx, bankForPort } from '../src/core/oplRaw.ts'
 
 const SAMPLE_RATE = 44100
 

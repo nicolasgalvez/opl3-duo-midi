@@ -1,5 +1,10 @@
+export interface Dimensions {
+  w: number
+  h: number
+}
+
 /** Legacy aspect-ratio presets (used by --ratio). */
-export const RATIOS = {
+export const RATIOS: Record<string, Dimensions> = {
   '16:9': { w: 1280, h: 720 },
   '9:16': { w: 720, h: 1280 },
   '1:1': { w: 1080, h: 1080 },
@@ -7,7 +12,7 @@ export const RATIOS = {
 }
 
 /** Platform + aspect presets for social video export. */
-export const PLATFORM_PRESETS = {
+export const PLATFORM_PRESETS: Record<string, Record<string, Dimensions>> = {
   youtube: {
     landscape: { w: 1920, h: 1080 },
     portrait: { w: 1080, h: 1920 },
@@ -19,18 +24,25 @@ export const PLATFORM_PRESETS = {
   },
 }
 
-function parseResolution(s) {
-  const parts = String(s)
+function parseResolution(s: string): Dimensions {
+  const [w, h] = String(s)
     .split('x')
     .map((n) => parseInt(n, 10))
-  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+  if (w === undefined || h === undefined || !w || !h) {
     throw new Error(`Invalid resolution "${s}". Use WxH, e.g. 1920x1080.`)
   }
-  return { w: parts[0], h: parts[1] }
+  return { w, h }
+}
+
+export interface DimensionArgv {
+  resolution?: string
+  platform?: string
+  aspect?: string
+  ratio?: string
 }
 
 /** Resolve output dimensions: --resolution > --platform+--aspect > --ratio > 16:9 default. */
-export function resolveDimensions(argv = {}, env = process.env) {
+export function resolveDimensions(argv: DimensionArgv = {}, env: NodeJS.ProcessEnv = process.env): Dimensions {
   if (argv.resolution) return parseResolution(argv.resolution)
 
   const platform = (argv.platform || env.OPL_PLATFORM || '').toLowerCase()

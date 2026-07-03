@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { resolveNetTarget } from '../lib/net/deviceTarget.mjs'
+import { resolveNetTarget } from '../src/core/deviceTarget.ts'
 
 test('resolveNetTarget returns null when no --host and no env var', () => {
   assert.equal(resolveNetTarget({}, {}), null)

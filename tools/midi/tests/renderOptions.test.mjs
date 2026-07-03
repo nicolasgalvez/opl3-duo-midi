@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { RENDER_OPTIONS, extractRenderArgs, serializeRenderArgs } from '../lib/renderOptions.mjs'
+import { RENDER_OPTIONS, extractRenderArgs, serializeRenderArgs } from '../src/cli/renderOptions.ts'
 
 test('RENDER_OPTIONS covers the documented render flags', () => {
   const flags = RENDER_OPTIONS.map((o) => o.flag)

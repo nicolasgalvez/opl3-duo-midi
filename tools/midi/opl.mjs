@@ -22,18 +22,19 @@ import { createHash } from 'node:crypto'
 import { basename, extname, join, dirname } from 'node:path'
 import { loadEnv, resolveLib, MIDI_TOOL_DIR } from './lib/paths.mjs'
 import { extractMidiBuffer } from './lib/midiFile.mjs'
-import { detectFormat } from './lib/format.mjs'
-import { parseVgm, toFlatEvents } from './lib/vgm.mjs'
-import { rawWriteSysEx, bankForPort } from './lib/oplRaw.mjs'
-import { buildControllerResetMessages, buildAllNotesOffMessages, sendMessages } from './lib/midiReset.mjs'
+import { detectFormat } from './src/core/format.ts'
+import { parseVgm, toFlatEvents } from './src/core/vgm.ts'
+import { rawWriteSysEx, bankForPort } from './src/core/oplRaw.ts'
+import { buildControllerResetMessages, buildAllNotesOffMessages, sendMessages } from './src/core/midiReset.ts'
 import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
-import { toM3U, toJSPF } from './lib/playlistWrite.mjs'
-import { removeTrack as removeTrackPure, moveTrack as moveTrackPure } from './lib/playlistEdit.mjs'
+import { toM3U, toJSPF } from './src/core/playlistWrite.ts'
+import { removeTrack as removeTrackPure, moveTrack as moveTrackPure } from './src/core/playlistEdit.ts'
 import { openLibrary } from './lib/library.mjs'
 import { openQueue } from './lib/queue.mjs'
-import { applyRenderOptions, extractRenderArgs, serializeRenderArgs } from './lib/renderOptions.mjs'
-import { UdpMidiOutput, DEFAULT_MIDI_UDP_PORT } from './lib/net/udpMidiOutput.mjs'
-import { resolveNetTarget } from './lib/net/deviceTarget.mjs'
+import { applyRenderOptions, extractRenderArgs, serializeRenderArgs } from './src/cli/renderOptions.ts'
+import { UdpMidiOutput } from './src/adapters/net/udpMidiOutput.ts'
+import { DEFAULT_MIDI_UDP_PORT } from './src/contracts/net.ts'
+import { resolveNetTarget } from './src/core/deviceTarget.ts'
 import { Mt32Pi, MT32_ROM_SETS, MT32_SYNTHS, MT32_DEFAULT_TEST_CHANNEL } from './lib/net/mt32pi.mjs'
 import {
   listSoundFonts,
@@ -45,7 +46,7 @@ import {
 } from './lib/net/mt32piFtp.mjs'
 import { resolveConfig, validateConfig } from './lib/config.mjs'
 import { resolveLayout } from './src/core/layout.ts'
-import { resolveDimensions } from './lib/presets.mjs'
+import { resolveDimensions } from './src/core/presets.ts'
 import {
   connectObs,
   resolveObsOpts,
@@ -55,8 +56,8 @@ import {
   waitForFile,
   waitForObsRecording,
 } from './lib/obs.mjs'
-import { buildMuxArgs, resolveAvOffset } from './lib/mux.mjs'
-import { nextPlaylistIndex, prevPlaylistIndex, shuffleOrder } from './lib/playback.mjs'
+import { buildMuxArgs, resolveAvOffset } from './src/core/mux.ts'
+import { nextPlaylistIndex, prevPlaylistIndex, shuffleOrder } from './src/core/playback.ts'
 import { EventEmitter } from 'node:events'
 import http from 'node:http'
 import net from 'node:net'
@@ -78,7 +79,7 @@ loadEnv()
 const DEFAULT_PORT_MATCH = 'OPL3Duo'
 const MIDI_EXTS = ['.mid', '.midi']
 // Extensions swept up by directory/folder scans (collectFiles). Actual format
-// dispatch is always by content (lib/format.mjs), never by extension — this
+// dispatch is always by content (src/core/format.ts), never by extension — this
 // list only decides which files a folder walk bothers to pick up.
 const PLAYABLE_EXTS = [...MIDI_EXTS, '.vgm']
 

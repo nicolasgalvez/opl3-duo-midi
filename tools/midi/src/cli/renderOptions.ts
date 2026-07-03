@@ -1,3 +1,5 @@
+import type { Argv } from 'yargs'
+
 // Single source of truth for `opl render`'s CLI options, shared with
 // `opl queue add` (identical flags) and the queue runner (which needs to
 // turn a stored job's args back into CLI flags to spawn `opl render`).
@@ -6,7 +8,21 @@
 // options (--host/--net-port) — applyRenderOptions() skips redeclaring
 // those on a command builder, but extraction/serialization still cover them
 // since a queued job needs to remember them too.
-export const RENDER_OPTIONS = [
+
+export interface RenderOption {
+  flag: string
+  alias?: string
+  type: 'boolean' | 'string' | 'number'
+  default?: boolean | string | number
+  choices?: string[]
+  describe: string
+  global?: boolean
+}
+
+/** The stored-job / parsed-argv shape: camelCased flag names to their values. */
+export type RenderArgs = Record<string, unknown>
+
+export const RENDER_OPTIONS: RenderOption[] = [
   { flag: 'recursive', alias: 'r', type: 'boolean', default: false, describe: 'recurse into subfolders' },
   { flag: 'album', type: 'boolean', default: false, describe: 'render all tracks as one continuous video' },
   { flag: 'audio-device', type: 'string', describe: 'audio input device name (use --list-audio to see)' },
@@ -88,28 +104,28 @@ export const RENDER_OPTIONS = [
   { flag: 'net-port', type: 'number', global: true, describe: 'UDP port for --host' },
 ]
 
-function camelCase(kebab) {
-  return kebab.replace(/-([a-z])/g, (_, c) => c.toUpperCase())
+function camelCase(kebab: string): string {
+  return kebab.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
 }
 
-const OPTION_BY_KEY = Object.fromEntries(RENDER_OPTIONS.map((o) => [camelCase(o.flag), o]))
+const OPTION_BY_KEY: Record<string, RenderOption> = Object.fromEntries(
+  RENDER_OPTIONS.map((o) => [camelCase(o.flag), o]),
+)
 
 /** Apply every non-global render option to a yargs command builder. */
-export function applyRenderOptions(y) {
+export function applyRenderOptions(y: Argv): Argv {
   let yy = y
   for (const opt of RENDER_OPTIONS) {
     if (opt.global) continue
-    const rest = { ...opt }
-    delete rest.flag
-    delete rest.global
-    yy = yy.option(opt.flag, rest)
+    const { flag, global: _global, ...rest } = opt
+    yy = yy.option(flag, rest)
   }
   return yy
 }
 
 /** Pick just the known render options out of a parsed yargs argv (drops _, $0, paths, unknown keys). */
-export function extractRenderArgs(argv) {
-  const out = {}
+export function extractRenderArgs(argv: Record<string, unknown>): RenderArgs {
+  const out: RenderArgs = {}
   for (const opt of RENDER_OPTIONS) {
     const key = camelCase(opt.flag)
     if (argv[key] === undefined) continue
@@ -119,8 +135,8 @@ export function extractRenderArgs(argv) {
 }
 
 /** Turn a stored args object back into CLI flag tokens for spawning `opl render`. */
-export function serializeRenderArgs(args) {
-  const tokens = []
+export function serializeRenderArgs(args: RenderArgs): string[] {
+  const tokens: string[] = []
   for (const [key, value] of Object.entries(args)) {
     const opt = OPTION_BY_KEY[key]
     if (!opt || value === undefined || value === null) continue

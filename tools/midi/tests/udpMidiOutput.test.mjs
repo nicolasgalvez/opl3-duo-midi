@@ -1,7 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import dgram from 'node:dgram'
-import { UdpMidiOutput, DEFAULT_MIDI_UDP_PORT } from '../lib/net/udpMidiOutput.mjs'
+import { UdpMidiOutput } from '../src/adapters/net/udpMidiOutput.ts'
+import { DEFAULT_MIDI_UDP_PORT } from '../src/contracts/net.ts'
 
 function withUdpServer(fn) {
   return new Promise((resolve, reject) => {

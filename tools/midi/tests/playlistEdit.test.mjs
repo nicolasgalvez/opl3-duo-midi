@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { removeTrack, moveTrack } from '../lib/playlistEdit.mjs'
+import { removeTrack, moveTrack } from '../src/core/playlistEdit.ts'
 
 const A = ['A', 'B', 'C', 'D']
 

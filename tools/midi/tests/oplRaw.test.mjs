@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { rawWriteSysEx, bankForPort } from '../lib/oplRaw.mjs'
+import { rawWriteSysEx, bankForPort } from '../src/core/oplRaw.ts'
 
 // Raw OPL2/OPL3 register-write SysEx for the OPL3 Duo's own firmware (ODM-15).
 // F0 7D 7F <bank> <regHiNibble> <regLoNibble> <valHiNibble> <valLoNibble> F7

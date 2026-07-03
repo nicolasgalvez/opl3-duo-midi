@@ -2,7 +2,12 @@
 // same track, so editing the queue never disrupts what's playing. Returns a new
 // array plus the adjusted current index (-1 when the list becomes empty).
 
-export function removeTrack(items, current, removeIdx) {
+export interface PlaylistEditResult<T> {
+  items: T[]
+  current: number
+}
+
+export function removeTrack<T>(items: T[], current: number, removeIdx: number): PlaylistEditResult<T> {
   if (removeIdx < 0 || removeIdx >= items.length) return { items, current }
   const next = items.slice(0, removeIdx).concat(items.slice(removeIdx + 1))
   if (next.length === 0) return { items: next, current: -1 }
@@ -12,13 +17,13 @@ export function removeTrack(items, current, removeIdx) {
   return { items: next, current: index }
 }
 
-export function moveTrack(items, current, from, to) {
+export function moveTrack<T>(items: T[], current: number, from: number, to: number): PlaylistEditResult<T> {
   if (from < 0 || from >= items.length || to < 0 || to >= items.length || from === to) {
     return { items, current }
   }
   const next = items.slice()
   const [moved] = next.splice(from, 1)
-  next.splice(to, 0, moved)
+  next.splice(to, 0, moved!)
 
   // Track where the currently-playing item lands.
   let index = current
