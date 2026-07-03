@@ -59,3 +59,47 @@ test('UdpMidiOutput.close does not throw', () => {
   const out = new UdpMidiOutput('127.0.0.1', 1999)
   assert.doesNotThrow(() => out.close())
 })
+
+test('UdpMidiOutput.close is idempotent', () => {
+  const out = new UdpMidiOutput('127.0.0.1', 1999)
+  out.close()
+  assert.doesNotThrow(() => out.close())
+})
+
+// dgram queues each send behind an async lookup; closing the socket in the
+// same tick used to drop every still-queued datagram. That is exactly the
+// shape of `opl panic`/`opl pc` over --host: fire messages, close, exit —
+// and none of them ever reached the device.
+test('UdpMidiOutput.close flushes queued datagrams instead of dropping them', async () => {
+  await withUdpServer(async (server, port) => {
+    const COUNT = 48 // mirrors `opl panic`: 3 CCs x 16 channels, close immediately
+    const received: Buffer[] = []
+    const allArrived = new Promise<void>((resolve) => {
+      server.on('message', (m) => {
+        received.push(m)
+        if (received.length === COUNT) resolve()
+      })
+    })
+    const out = new UdpMidiOutput('127.0.0.1', port)
+    for (let ch = 0; ch < 16; ch++) {
+      out.send('cc', { controller: 64, value: 0, channel: ch })
+      out.send('cc', { controller: 120, value: 0, channel: ch })
+      out.send('cc', { controller: 123, value: 0, channel: ch })
+    }
+    out.close() // same tick as the sends — must not drop what is still queued
+
+    let timer: NodeJS.Timeout | undefined
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`only ${received.length}/${COUNT} datagrams arrived — close dropped the rest`)),
+        2000,
+      )
+    })
+    try {
+      await Promise.race([allArrived, timeout])
+    } finally {
+      clearTimeout(timer)
+    }
+    assert.equal(received.length, COUNT)
+  })
+})
