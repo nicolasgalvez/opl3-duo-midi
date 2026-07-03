@@ -32,16 +32,16 @@ function haveBin(bin: string): boolean {
 
 function fluidsynthArgs(): string[] {
   // -s: keep running as a server; -i: no interactive shell; -g: gain.
-  // OPL_FLUID_AUDIO_DEVICE aims fluidsynth's output at the loopback device
-  // directly (no need to change the system default output): the ALSA
-  // snd-aloop playback side on Linux, "BlackHole 2ch" on macOS.
-  const common = ['-si', '-g', '1']
+  // OPL_FLUID_AUDIO_DRIVER picks fluidsynth's audio backend (coreaudio on
+  // macOS; alsa or pulseaudio on Linux), and OPL_FLUID_AUDIO_DEVICE aims it
+  // at the loopback device directly (no need to change the system default
+  // output): the snd-aloop playback side, a Pulse null sink, or "BlackHole
+  // 2ch" on macOS.
+  const darwin = os.platform() === 'darwin'
+  const driver = process.env.OPL_FLUID_AUDIO_DRIVER || (darwin ? 'coreaudio' : 'alsa')
   const device = process.env.OPL_FLUID_AUDIO_DEVICE
-  if (os.platform() === 'darwin') {
-    const target = device ? ['-o', `audio.coreaudio.device=${device}`] : []
-    return [...common, '-a', 'coreaudio', ...target, '-m', 'coremidi', SOUNDFONT]
-  }
-  return [...common, '-a', 'alsa', '-o', `audio.alsa.device=${device || 'default'}`, '-m', 'alsa_seq', SOUNDFONT]
+  const target = device ? ['-o', `audio.${driver}.device=${device}`] : []
+  return ['-si', '-g', '1', '-a', driver, ...target, '-m', darwin ? 'coremidi' : 'alsa_seq', SOUNDFONT]
 }
 
 function oplSync(args: string[], timeoutMs = 120_000) {
@@ -54,16 +54,25 @@ function oplSync(args: string[], timeoutMs = 120_000) {
   return spawnSync(process.execPath, [OPL, ...args], { cwd: TOOL_DIR, encoding: 'utf8', timeout: timeoutMs, env })
 }
 
-async function waitForFluidPort(timeoutMs = 20_000): Promise<string> {
+async function waitForFluidPort(fluidLog: () => string, timeoutMs = 20_000): Promise<string> {
   const deadline = Date.now() + timeoutMs
-  let last = ''
+  let lastOut = ''
+  let lastErr = ''
   while (Date.now() < deadline) {
-    last = oplSync(['list'], 10_000).stdout ?? ''
-    const line = last.split('\n').find((l) => /fluid/i.test(l))
+    const r = oplSync(['list'], 10_000)
+    lastOut = r.stdout ?? ''
+    lastErr = r.stderr ?? ''
+    const line = lastOut.split('\n').find((l) => /fluid/i.test(l))
     if (line) return line.trim().replace(/^-\s*/, '')
     await new Promise((r) => setTimeout(r, 500))
   }
-  throw new Error(`fluidsynth MIDI port never appeared in \`opl list\`. Last output:\n${last}`)
+  // Note for Linux: MIDI here rides the kernel ALSA sequencer (snd-seq).
+  // Containers/VMs without sound modules (e.g. Docker Desktop's linuxkit
+  // kernel) cannot run this leg at all — use a full VM or CI.
+  throw new Error(
+    `fluidsynth MIDI port never appeared in \`opl list\`.\n` +
+      `--- opl list stdout ---\n${lastOut}\n--- opl list stderr ---\n${lastErr}\n--- fluidsynth ---\n${fluidLog()}`,
+  )
 }
 
 function ffprobe(file: string): { streams: string[]; durationSec: number } {
@@ -108,7 +117,7 @@ test(
     fluid.stderr?.on('data', (d: Buffer) => (fluidLog += d))
 
     try {
-      const port = await waitForFluidPort()
+      const port = await waitForFluidPort(() => fluidLog)
       console.log(`fluidsynth MIDI port: ${port}`)
 
       const render = oplSync([

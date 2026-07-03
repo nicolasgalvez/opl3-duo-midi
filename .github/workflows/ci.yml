@@ -85,7 +85,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libpulse0 fluidsynth ffmpeg "linux-modules-extra-$(uname -r)"
-          sudo modprobe snd-aloop
+          # snd-aloop: the loopback card; snd-seq: the ALSA sequencer that
+          # both RtMidi (easymidi) and fluidsynth's MIDI driver require.
+          sudo modprobe snd-aloop snd-seq
           echo "OPL_FLUID_AUDIO_DEVICE=plughw:Loopback,0,0" >> "$GITHUB_ENV"
           cat /proc/asound/cards
 
