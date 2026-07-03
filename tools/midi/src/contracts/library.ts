@@ -4,6 +4,7 @@ export interface LibraryEntry {
   path: string
   name: string
   folder: string
-  addedAt: string | null
+  /** Epoch milliseconds (Date.now() at upload time), or null when unknown. */
+  addedAt: number | null
   tags: string[]
 }

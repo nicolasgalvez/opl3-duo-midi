@@ -66,10 +66,11 @@ export function setReversedStereoSysEx(on: boolean): number[] {
 
 // Thin convenience wrapper around any MIDI output (UDP or USB — anything with
 // a `.send(type, data)` method) that speaks the mt32-pi custom SysEx protocol.
-export class Mt32Pi {
-  readonly out: MidiOutput
+// Generic over the output so callers keep transport extras (e.g. .close()).
+export class Mt32Pi<T extends MidiOutput = MidiOutput> {
+  readonly out: T
 
-  constructor(out: MidiOutput) {
+  constructor(out: T) {
     this.out = out
   }
 

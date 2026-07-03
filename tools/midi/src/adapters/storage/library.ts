@@ -14,7 +14,7 @@ interface LibraryData {
 }
 
 export interface LibraryEntryMeta {
-  addedAt?: string | null
+  addedAt?: number | null
   tags?: string[]
 }
 
@@ -59,7 +59,7 @@ export class Library {
   }
 
   /** All entries, or those whose name/folder contains `q` (case-insensitive). */
-  list(q?: string): LibraryEntry[] {
+  list(q?: string | null): LibraryEntry[] {
     const entries = this.db.data.entries
     if (!q) return entries.slice()
     const needle = String(q).toLowerCase()
