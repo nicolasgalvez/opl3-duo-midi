@@ -50,4 +50,10 @@ npm), and a build step buys nothing but drift between source and artifact.
 
 - Unit tests: `node --test` against core/contracts (pure, fast).
 - E2E: Playwright specs against `opl serve`.
+- Full render pipeline e2e (`npm run test:e2e:render`): fluidsynth + the
+  TimGM6mb GM soundfont stand in for the OPL3 Duo hardware, and a loopback
+  audio device (ALSA snd-aloop / BlackHole) stands in for the board's analog
+  capture — CI runs the real `opl render` chain on both Linux and macOS and
+  asserts the finished MP4 is non-silent. Opt-in via `OPL_RENDER_E2E=1`
+  (see tests/render-pipeline.e2e.ts for the env knobs).
 - Red/Green TDD for new behavior: write the failing test first.

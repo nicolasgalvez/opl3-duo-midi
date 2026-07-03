@@ -11,6 +11,7 @@
     "test": "npm run test:unit && playwright test",
     "test:unit": "node --test tests/*.test.ts",
     "test:audio": "node tests/audio-capture.integration.ts",
+    "test:e2e:render": "node --test tests/render-pipeline.e2e.ts",
     "test:render": "playwright test render"
   },
   "dependencies": {
