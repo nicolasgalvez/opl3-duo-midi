@@ -1,0 +1,27 @@
+{
+  // Node-targeted strict config. The CLI runs .ts directly via Node's native
+  // type stripping (Node >= 24) — no build step, no loader. That constrains
+  // us to erasable syntax (no enums/namespaces/parameter properties) and
+  // explicit .ts extensions on relative imports; tsc runs typecheck-only.
+  "compilerOptions": {
+    "module": "nodenext",
+    "target": "esnext",
+    "lib": ["esnext"],
+    "types": ["node"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+
+    // Match Node's type-stripping semantics.
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts", "*.ts"],
+  "exclude": ["node_modules", "web-app", "web", "test-results"]
+}

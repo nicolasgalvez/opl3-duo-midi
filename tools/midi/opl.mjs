@@ -44,7 +44,7 @@ import {
   DEFAULT_FTP_PASSWORD,
 } from './lib/net/mt32piFtp.mjs'
 import { resolveConfig, validateConfig } from './lib/config.mjs'
-import { resolveLayout } from './lib/layout.mjs'
+import { resolveLayout } from './src/core/layout.ts'
 import { resolveDimensions } from './lib/presets.mjs'
 import {
   connectObs,
