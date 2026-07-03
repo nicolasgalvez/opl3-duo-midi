@@ -51,6 +51,7 @@ es.onmessage = (e) => {
 }
 
 function applyEvent(d) {
+  if (d.k === 'raw') return applyRawEvent(d)
   const c = channels[d.c]
   if (!c) return
   if (d.k === 'on') c.notes.set(d.a, d.b)
@@ -59,6 +60,21 @@ function applyEvent(d) {
     if (d.a === 7) c.vol = d.b / 127
     else if (d.a === 11) c.exp = d.b / 127
   }
+}
+
+// VGM playback has no MIDI channels/notes — approximate EQ activity from OPL
+// key-on/off register writes (0xB0-0xB8 per register port, bit 5 = key-on),
+// mapped onto the same 16 bars: port 0 -> channels 0-8, port 1 -> channels
+// 9-17 (channels 16-17 have nowhere to go on a 16-bar display and are
+// dropped). Doesn't reflect per-operator volume (Total Level) — key-on/off
+// timing is the dominant visual signal for FM chip music anyway.
+function applyRawEvent(d) {
+  if (d.reg < 0xb0 || d.reg > 0xb8) return
+  const chIdx = d.port === 0 ? d.reg - 0xb0 : 9 + (d.reg - 0xb0)
+  const c = channels[chIdx]
+  if (!c) return
+  if (d.value & 0x20) c.notes.set('opl', 110)
+  else c.notes.delete('opl')
 }
 function resetChannels() {
   for (const c of channels) {
