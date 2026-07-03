@@ -29,6 +29,10 @@ jobs:
         working-directory: tools/midi/web-app
         run: npm ci
 
+      - name: Typecheck (tsc, strict)
+        working-directory: tools/midi
+        run: npm run typecheck
+
       - name: Node unit tests
         working-directory: tools/midi
         run: npm run test:unit
@@ -50,3 +54,69 @@ jobs:
       - name: E2E (Playwright, deterministic)
         working-directory: tools/midi
         run: npx playwright test --grep-invert "synthesizes audio"
+
+  # Full `opl render` pipeline (ODM-13): fluidsynth + the TimGM6mb GM soundfont
+  # stand in for the OPL3 Duo hardware, and a loopback audio device stands in
+  # for the board's analog capture — so the real MIDI -> synth -> capture ->
+  # browser video -> mux chain runs on both Linux and macOS.
+  render-e2e:
+    name: render e2e (fluidsynth, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            # RtAudio's Pulse backend exposes this fixed device name; the
+            # default source is pointed at the null sink's monitor below.
+            audio-device: 'PulseAudio'
+          - os: macos-latest
+            audio-device: 'BlackHole 2ch'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      # All userspace: Azure 6.x runner kernels ship no sound modules at all
+      # (no snd-aloop, no snd-seq), so both the audio loopback (Pulse null
+      # sink) and the MIDI transport (opl's own UDP adapter -> fluidsynth's
+      # TCP shell, via tests/fluidUdpBridge.ts) avoid the kernel entirely.
+      - name: Audio loopback + fluidsynth (Linux, Pulse null sink)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libasound2-plugins libpulse0 pulseaudio pulseaudio-utils fluidsynth ffmpeg
+          pulseaudio -D --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=oplsink
+          pactl set-default-sink oplsink
+          pactl set-default-source oplsink.monitor
+          echo "OPL_FLUID_AUDIO_DRIVER=pulseaudio" >> "$GITHUB_ENV"
+          echo "OPL_FLUID_MIDI=udp" >> "$GITHUB_ENV"
+
+      - name: Audio loopback + fluidsynth (macOS, BlackHole)
+        if: runner.os == 'macOS'
+        run: |
+          brew install fluid-synth blackhole-2ch ffmpeg
+          # BlackHole is a CoreAudio HAL plugin; coreaudiod must reload to see
+          # it. fluidsynth then plays straight into it (audio.coreaudio.device)
+          # — the system default output never changes.
+          sudo killall coreaudiod || true
+          sleep 3
+          echo "OPL_FLUID_AUDIO_DEVICE=BlackHole 2ch" >> "$GITHUB_ENV"
+
+      - name: Install root + CLI deps
+        run: npm ci
+
+      - name: Install Playwright (chromium)
+        working-directory: tools/midi
+        run: npx playwright install --with-deps chromium
+
+      - name: Full render pipeline e2e
+        working-directory: tools/midi
+        env:
+          OPL_RENDER_E2E: '1'
+          OPL_AUDIO_DEVICE: ${{ matrix.audio-device }}
+        run: npm run test:e2e:render
