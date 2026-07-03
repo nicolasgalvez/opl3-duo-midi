@@ -4,7 +4,8 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { validateConfig, presetConfig, loadConfigFile } from '../lib/config.mjs'
+import { validateConfig, presetConfig } from '../src/contracts/config.ts'
+import { loadConfigFile } from '../src/adapters/fs/config.ts'
 
 test('validateConfig fills defaults (full feature set)', () => {
   const c = validateConfig({})

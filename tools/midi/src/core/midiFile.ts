@@ -1,10 +1,8 @@
-import { readFileSync } from 'node:fs'
-
-function fourCc(buf, offset) {
+function fourCc(buf: Buffer, offset: number): string {
   return buf.subarray(offset, offset + 4).toString('ascii')
 }
 
-function unwrapRmid(buf, path) {
+function unwrapRmid(buf: Buffer, path?: string): Buffer {
   if (buf.length < 12) {
     throw new Error(`Bad MIDI file${path ? ` ${path}` : ''}. RIFF header is incomplete.`)
   }
@@ -40,13 +38,9 @@ function unwrapRmid(buf, path) {
 }
 
 /** Extract the standard-MIDI-file bytes from an already-read buffer (unwrapping RIFF RMID if needed). */
-export function extractMidiBuffer(buf, path) {
+export function extractMidiBuffer(buf: Buffer, path?: string): Buffer {
   if (fourCc(buf, 0) === 'MThd') return buf
   if (fourCc(buf, 0) === 'RIFF') return unwrapRmid(buf, path)
 
   throw new Error(`Bad MIDI file ${path}. Expected MThd or RIFF RMID, got: ${fourCc(buf, 0)}`)
-}
-
-export function readMidiData(path) {
-  return extractMidiBuffer(readFileSync(path), path)
 }

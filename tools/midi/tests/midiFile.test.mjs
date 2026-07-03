@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import os from 'node:os'
-import { readMidiData } from '../lib/midiFile.mjs'
+import { readMidiData } from '../src/adapters/fs/midiFile.ts'
 
 function riffRmid(smf) {
   const dataSize = smf.length

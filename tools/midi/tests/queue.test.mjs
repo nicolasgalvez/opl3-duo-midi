@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { openQueue } from '../lib/queue.mjs'
+import { openQueue } from '../src/adapters/storage/queue.ts'
 
 function tmpDb() {
   const dir = mkdtempSync(join(tmpdir(), 'opl-queue-'))

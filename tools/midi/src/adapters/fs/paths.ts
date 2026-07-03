@@ -2,16 +2,16 @@ import { join, dirname, isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { statSync } from 'node:fs'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
+const here = dirname(fileURLToPath(import.meta.url))
 
 /** Absolute path to tools/midi (where opl.mjs and web/ live). */
-export const MIDI_TOOL_DIR = join(__dirname, '..')
+export const MIDI_TOOL_DIR = join(here, '..', '..', '..')
 
 /** Repo root (parent of tools/midi). */
 export const REPO_ROOT = join(MIDI_TOOL_DIR, '..', '..')
 
 /** Load .env from repo root and tools/midi (later files do not override earlier keys). */
-export function loadEnv() {
+export function loadEnv(): void {
   for (const dir of [REPO_ROOT, MIDI_TOOL_DIR]) {
     try {
       process.loadEnvFile(join(dir, '.env'))
@@ -22,7 +22,7 @@ export function loadEnv() {
 }
 
 /** Resolve a path; for a relative path not found in cwd, fall back to MIDI_LIBRARY. */
-export function resolveLib(p) {
+export function resolveLib(p: string): string {
   if (isAbsolute(p)) return p
   try {
     statSync(p)

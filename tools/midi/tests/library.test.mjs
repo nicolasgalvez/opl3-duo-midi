@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { openLibrary } from '../lib/library.mjs'
+import { openLibrary } from '../src/adapters/storage/library.ts'
 
 function tmpDb() {
   const dir = mkdtempSync(join(tmpdir(), 'opl-lib-'))
