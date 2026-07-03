@@ -16,6 +16,7 @@ import {
   type Mt32PiFtpOptions,
 } from '../../adapters/net/mt32piFtp.ts'
 import { sleep, type GlobalArgv } from '../shared.ts'
+import { requireChannel, requireDuration } from '../args.ts'
 
 export interface Mt32FtpArgv extends GlobalArgv {
   ftpPort?: number
@@ -137,15 +138,17 @@ export async function cmdMt32Upload(argv: Mt32FtpArgv & { file: string }): Promi
 }
 
 export async function cmdMt32Test(argv: GlobalArgv & { ch: number; dur: number }): Promise<void> {
+  const chArg = requireChannel(argv.ch)
+  const dur = requireDuration(argv.dur)
   const net = requireMt32Target(argv)
   const out = new UdpMidiOutput(net.host, net.port)
-  const ch = argv.ch - 1
+  const ch = chArg - 1
   console.log(
-    `net://${net.host}:${net.port}: MT-32 test note, ch${argv.ch} for ${argv.dur}s ` +
+    `net://${net.host}:${net.port}: MT-32 test note, ch${chArg} for ${dur}s ` +
       '(MT-32 mode only sounds on melodic channels 2-9 — channel 1 is silent)',
   )
   out.send('noteon', { note: 60, velocity: 100, channel: ch })
-  await sleep(argv.dur * 1000)
+  await sleep(dur * 1000)
   out.send('noteoff', { note: 60, velocity: 0, channel: ch })
   out.close()
 }
