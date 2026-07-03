@@ -12,8 +12,10 @@
 // on the next run after space is freed (resume-safe).
 import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs'
 import { spawn, spawnSync } from 'node:child_process'
-import easymidi from 'easymidi'
 import OBSWebSocket from 'obs-websocket-js'
+
+import { buildControllerResetMessages, sendMessages } from './src/core/midiReset.ts'
+import { midiOutputs, openUsbOutput } from './src/adapters/midi/outputs.ts'
 
 const HOME = process.env.HOME
 const TOP10 = `${HOME}/Music/video-game-music-90000-midi-files/top10`
@@ -37,18 +39,50 @@ const SAFETY_MULT = 1.15 // +15% on the estimate
 const SAFETY_FIXED_GB = 1.5 // + fixed headroom
 const HARD_FLOOR_GB = 3.5 // never start an album below this free
 
+interface AlbumInfo {
+  name: string
+  dir: string
+  out: string
+  title: string
+  tracks: number
+  seconds: number
+}
+
+interface AlbumRecord {
+  album: string
+  tracks: number
+  minutes: number
+  output: string
+  ok?: boolean
+  skipped?: boolean
+  deferred?: boolean
+  reason?: string
+  error?: string
+  sizeMB?: number
+  wallSec?: number
+  meanDb?: number | null
+  maxDb?: number | null
+}
+
+interface RenderResult {
+  ok: boolean
+  code?: number | null
+  error?: string
+  totalSec: number | null
+}
+
 mkdirSync(OUTDIR, { recursive: true })
-const DURATIONS = (() => {
+const DURATIONS: Record<string, number> = (() => {
   try {
     return JSON.parse(readFileSync(DURATIONS_FILE, 'utf8'))
   } catch {
     return {}
   }
 })()
-const results = []
-const deferred = []
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-function log(msg) {
+const results: AlbumRecord[] = []
+const deferred: string[] = []
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+function log(msg: string): void {
   const line = `[${new Date().toISOString()}] ${msg}`
   console.log(line)
   try {
@@ -58,7 +92,7 @@ function log(msg) {
   }
 }
 
-function albums() {
+function albums(): AlbumInfo[] {
   return readdirSync(TOP10, { withFileTypes: true })
     .filter((d) => d.isDirectory() && /^\d{2} - /.test(d.name))
     .map((d) => d.name)
@@ -73,18 +107,18 @@ function albums() {
     }))
 }
 
-function freeGB(p) {
+function freeGB(p: string): number {
   const r = spawnSync('df', ['-k', p], { encoding: 'utf8' })
   const lines = (r.stdout || '').trim().split('\n')
   const cols = (lines[lines.length - 1] || '').split(/\s+/)
-  const availK = parseInt(cols[3], 10)
+  const availK = parseInt(cols[3] ?? '', 10)
   return Number.isFinite(availK) ? (availK * 1024) / 1e9 : 0
 }
-function needGB(seconds) {
+function needGB(seconds: number): number {
   return (seconds / 3600) * PEAK_GB_PER_HR * SAFETY_MULT + SAFETY_FIXED_GB
 }
 
-function purgeObsMkv() {
+function purgeObsMkv(): void {
   let freed = 0
   try {
     for (const f of readdirSync(MOVIES)) {
@@ -104,7 +138,7 @@ function purgeObsMkv() {
   if (freed) log(`purged OBS mkv intermediates: ${(freed / 1e9).toFixed(2)}GB`)
 }
 
-async function connectObs() {
+async function connectObs(): Promise<OBSWebSocket | null> {
   const obs = new OBSWebSocket()
   try {
     await obs.connect(OBS_URL)
@@ -113,7 +147,7 @@ async function connectObs() {
     return null
   }
 }
-async function ensureObsUp() {
+async function ensureObsUp(): Promise<OBSWebSocket | null> {
   let obs = await connectObs()
   if (obs) return obs
   log('OBS not reachable — relaunching (open -a OBS)')
@@ -129,7 +163,7 @@ async function ensureObsUp() {
   log('OBS still down after 90s')
   return null
 }
-async function ensureIdle(obs) {
+async function ensureIdle(obs: OBSWebSocket): Promise<void> {
   try {
     const { outputActive } = await obs.call('GetRecordStatus')
     if (outputActive) {
@@ -142,7 +176,7 @@ async function ensureIdle(obs) {
   }
 }
 
-function otherRenderRunning() {
+function otherRenderRunning(): boolean {
   const r = spawnSync('pgrep', ['-f', 'opl.mjs render'], { encoding: 'utf8' })
   return (
     (r.stdout || '')
@@ -151,7 +185,7 @@ function otherRenderRunning() {
       .filter(Boolean).length > 0
   )
 }
-async function waitForNoOtherRender() {
+async function waitForNoOtherRender(): Promise<void> {
   if (!otherRenderRunning()) return
   log('Another opl render is in flight (standalone FF6?). Waiting for it to finish…')
   const start = Date.now()
@@ -164,42 +198,31 @@ async function waitForNoOtherRender() {
   await sleep(3000)
 }
 
-function fullReset() {
+// Full GM-style reset between albums, shared with the CLI's own track-to-track
+// reset (src/core/midiReset.ts), plus a MIDI System Reset to re-init the chips.
+async function fullReset(): Promise<void> {
   try {
-    const outs = easymidi.getOutputs()
+    const outs = midiOutputs()
     const name = outs.find((n) => n.includes('OPL3Duo')) || outs[0]
     if (!name) {
       log('reset: no MIDI output found')
       return
     }
-    const out = new easymidi.Output(name)
-    for (let ch = 0; ch < 16; ch++) {
-      out.send('cc', { controller: 120, value: 0, channel: ch })
-      out.send('cc', { controller: 123, value: 0, channel: ch })
-      out.send('cc', { controller: 121, value: 0, channel: ch })
-      out.send('cc', { controller: 64, value: 0, channel: ch })
-      out.send('cc', { controller: 1, value: 0, channel: ch })
-      out.send('cc', { controller: 11, value: 127, channel: ch })
-      out.send('pitch', { value: 8192, channel: ch })
-      out.send('program', { number: 0, channel: ch })
-    }
+    const out = openUsbOutput(name)
+    sendMessages(out, buildControllerResetMessages())
     out.send('reset')
-    return new Promise((r) =>
-      setTimeout(() => {
-        try {
-          out.close()
-        } catch {
-          /* ignore */
-        }
-        r()
-      }, 400),
-    )
+    await sleep(400)
+    try {
+      out.close()
+    } catch {
+      /* ignore */
+    }
   } catch (e) {
-    log(`reset error: ${e.message}`)
+    log(`reset error: ${(e as Error).message}`)
   }
 }
 
-function loudness(file) {
+function loudness(file: string): { meanDb: number | null; maxDb: number | null } {
   try {
     const r = spawnSync(FFMPEG, ['-hide_banner', '-i', file, '-af', 'volumedetect', '-f', 'null', '/dev/null'], {
       encoding: 'utf8',
@@ -207,13 +230,13 @@ function loudness(file) {
     const out = (r.stderr || '') + (r.stdout || '')
     const mean = out.match(/mean_volume:\s*(-?[\d.]+) dB/)
     const max = out.match(/max_volume:\s*(-?[\d.]+) dB/)
-    return { meanDb: mean ? +mean[1] : null, maxDb: max ? +max[1] : null }
+    return { meanDb: mean ? +mean[1]! : null, maxDb: max ? +max[1]! : null }
   } catch {
     return { meanDb: null, maxDb: null }
   }
 }
 
-function render(albumDir, outputAbs, title, seconds) {
+function render(albumDir: string, outputAbs: string, title: string, seconds: number): Promise<RenderResult> {
   return new Promise((resolve) => {
     const args = [
       'render',
@@ -230,15 +253,15 @@ function render(albumDir, outputAbs, title, seconds) {
       outputAbs,
     ]
     const child = spawn(OPL, args, { cwd: MIDI_CWD })
-    let killed = false,
-      totalSec = seconds || null
+    let killed = false
+    let totalSec: number | null = seconds || null
     const budget0 = seconds ? seconds * 1000 * 1.4 + 900000 : 0
     let timer = setTimeout(() => fail('timeout-startup'), 300000)
     if (budget0) {
       clearTimeout(timer)
       timer = setTimeout(() => fail('timeout'), budget0)
     }
-    function fail(reason) {
+    function fail(reason: string): void {
       if (killed) return
       killed = true
       log(`  killing render (${reason})`)
@@ -249,11 +272,11 @@ function render(albumDir, outputAbs, title, seconds) {
       }
       resolve({ ok: false, error: reason, totalSec })
     }
-    function onData(buf) {
+    function onData(buf: Buffer): void {
       const s = buf.toString()
       const m = s.match(/([\d.]+)s total/) || s.match(/\(([\d.]+)s\)/)
       if (m && !seconds && !totalSec) {
-        totalSec = parseFloat(m[1])
+        totalSec = parseFloat(m[1]!)
         clearTimeout(timer)
         timer = setTimeout(() => fail('timeout'), totalSec * 1000 * 1.4 + 900000)
       }
@@ -278,9 +301,14 @@ function render(albumDir, outputAbs, title, seconds) {
   log(
     `=== ALBUM batch start: ${list.length} albums, ${(list.reduce((s, a) => s + a.seconds, 0) / 3600).toFixed(1)}h music -> ${OUTDIR} ===`,
   )
-  let obs = null
+  let obs: OBSWebSocket | null = null
   for (const a of list) {
-    const rec = { album: a.title, tracks: a.tracks, minutes: +(a.seconds / 60).toFixed(0), output: `${a.title}.mp4` }
+    const rec: AlbumRecord = {
+      album: a.title,
+      tracks: a.tracks,
+      minutes: +(a.seconds / 60).toFixed(0),
+      output: `${a.title}.mp4`,
+    }
     if (existsSync(a.out) && statSync(a.out).size > MIN_OK_BYTES) {
       rec.ok = true
       rec.skipped = true
