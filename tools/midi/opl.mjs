@@ -21,7 +21,10 @@ import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync
 import { createHash } from 'node:crypto'
 import { basename, extname, join, dirname } from 'node:path'
 import { loadEnv, resolveLib, MIDI_TOOL_DIR } from './lib/paths.mjs'
-import { readMidiData } from './lib/midiFile.mjs'
+import { extractMidiBuffer } from './lib/midiFile.mjs'
+import { detectFormat } from './lib/format.mjs'
+import { parseVgm, toFlatEvents } from './lib/vgm.mjs'
+import { rawWriteSysEx, bankForPort } from './lib/oplRaw.mjs'
 import { buildControllerResetMessages, buildAllNotesOffMessages, sendMessages } from './lib/midiReset.mjs'
 import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
 import { toM3U, toJSPF } from './lib/playlistWrite.mjs'
@@ -74,6 +77,10 @@ loadEnv()
 
 const DEFAULT_PORT_MATCH = 'OPL3Duo'
 const MIDI_EXTS = ['.mid', '.midi']
+// Extensions swept up by directory/folder scans (collectFiles). Actual format
+// dispatch is always by content (lib/format.mjs), never by extension — this
+// list only decides which files a folder walk bothers to pick up.
+const PLAYABLE_EXTS = [...MIDI_EXTS, '.vgm']
 
 const GM_NAMES = [
   'Acoustic Grand Piano',
@@ -232,6 +239,19 @@ function openOutput(argv) {
 
 function allNotesOff(out) {
   sendMessages(out, buildAllNotesOffMessages())
+}
+
+// Full MIDI System Reset (0xFF real-time byte), sent before every track starts.
+// Cheap and idempotent: it's what makes track transitions self-healing if a
+// prior VGM session (or a crashed process) left the chip's raw registers dirty
+// — OplSynth::systemReset() re-asserts setOPL3Enabled/setAll4OPChannelsEnabled,
+// which raw register writes can otherwise leave in a broken state.
+function resetToBaseline(out) {
+  try {
+    out.send('reset')
+  } catch {
+    /* ignore — best-effort */
+  }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -447,7 +467,7 @@ function midiOutputs() {
 }
 
 function collectFiles(paths, recursive) {
-  const isMidi = (p) => MIDI_EXTS.includes(extname(p).toLowerCase())
+  const isMidi = (p) => PLAYABLE_EXTS.includes(extname(p).toLowerCase())
   const out = []
   for (const raw of paths) {
     const p = resolveLib(raw)
@@ -478,9 +498,22 @@ function collectFiles(paths, recursive) {
   return [...new Set(out)]
 }
 
+// Read a track file once and parse it by detected content — never by
+// extension, so a VGM renamed to .mid still routes correctly. Shared by the
+// terminal play path, the Engine/serve path, and render's duration lookup.
+function loadTrack(path) {
+  const buf = readFileSync(path)
+  if (detectFormat(buf) === 'vgm') return { format: 'vgm', vgm: parseVgm(buf) }
+  return { format: 'midi', midi: new Midi(extractMidiBuffer(buf, path)) }
+}
+
+function trackDuration(path) {
+  const track = loadTrack(path)
+  return track.format === 'vgm' ? track.vgm.duration : track.midi.duration
+}
+
 // Flatten a parsed MIDI file into a time-sorted list of send actions.
-function buildEvents(out, path, forceCh) {
-  const midi = new Midi(readMidiData(path))
+function buildMidiEvents(out, midi, forceCh) {
   const events = []
   for (const track of midi.tracks) {
     const ch = forceCh != null ? forceCh - 1 : track.channel
@@ -509,6 +542,22 @@ function buildEvents(out, path, forceCh) {
   return { events, duration: midi.duration }
 }
 
+// Flatten a parsed VGM into the same {events,duration} shape as buildMidiEvents
+// — playOne's scheduler only ever touches events[].t/.fn(), so it needs no
+// VGM-specific handling at all.
+function buildVgmEvents(out, vgm) {
+  const events = vgm.writes.map(({ t, port, reg, value }) => ({
+    t,
+    fn: () => out.send('sysex', rawWriteSysEx(bankForPort(port), reg, value)),
+  }))
+  return { events, duration: vgm.duration }
+}
+
+function buildEvents(out, path, forceCh) {
+  const track = loadTrack(path)
+  return track.format === 'vgm' ? buildVgmEvents(out, track.vgm) : buildMidiEvents(out, track.midi, forceCh)
+}
+
 function makeKeys() {
   if (!process.stdin.isTTY) return null
   readline.emitKeypressEvents(process.stdin)
@@ -532,6 +581,7 @@ function makeKeys() {
 
 // Returns 'next' | 'prev' | 'quit' | 'done'.
 function playOne(out, path, forceCh, keys) {
+  resetToBaseline(out) // clean chip state before this track, regardless of what the previous one left behind
   let info
   try {
     info = buildEvents(out, path, forceCh)
@@ -591,7 +641,7 @@ function playOne(out, path, forceCh, keys) {
 async function cmdPlay(argv) {
   let files = collectFiles(argv.paths, argv.recursive)
   if (files.length === 0) {
-    console.error('No MIDI files found.')
+    console.error('No playable files found.')
     process.exit(1)
   }
   if (argv.shuffle) files.sort(() => Math.random() - 0.5)
@@ -604,6 +654,7 @@ async function cmdPlay(argv) {
   )
 
   const cleanup = () => {
+    resetToBaseline(out)
     allNotesOff(out)
     if (keys) keys.close()
     out.close()
@@ -612,6 +663,20 @@ async function cmdPlay(argv) {
     console.log('\nstopped.')
     cleanup()
     process.exit(0)
+  })
+  process.on('SIGTERM', () => {
+    cleanup()
+    process.exit(0)
+  })
+  process.on('uncaughtException', (err) => {
+    console.error('\ncrashed:', err.message || err)
+    cleanup()
+    process.exit(1)
+  })
+  process.on('unhandledRejection', (err) => {
+    console.error('\ncrashed (unhandled rejection):', err?.message || err)
+    cleanup()
+    process.exit(1)
   })
 
   let i = 0
@@ -633,8 +698,7 @@ async function cmdPlay(argv) {
 // --------------------------------------------------------------------------
 
 // Flatten a .mid into plain data events (no closures) for the engine + viz.
-function buildEventList(path, forceCh) {
-  const midi = new Midi(readMidiData(path))
+function buildMidiEventList(midi, forceCh) {
   const events = []
   for (const track of midi.tracks) {
     const ch = forceCh != null ? forceCh - 1 : track.channel
@@ -659,6 +723,13 @@ function buildEventList(path, forceCh) {
   return { events, duration: midi.duration }
 }
 
+function buildEventList(path, forceCh) {
+  const track = loadTrack(path)
+  return track.format === 'vgm'
+    ? { events: toFlatEvents(track.vgm), duration: track.vgm.duration }
+    : buildMidiEventList(track.midi, forceCh)
+}
+
 function sendRaw(out, ev) {
   switch (ev.k) {
     case 'on':
@@ -675,6 +746,9 @@ function sendRaw(out, ev) {
       break
     case 'program':
       out.send('program', { number: ev.a, channel: ev.c })
+      break
+    case 'raw':
+      out.send('sysex', ev.bytes)
       break
   }
 }
@@ -807,13 +881,15 @@ class Engine {
 
   load(i) {
     if (i < 0 || i >= this.playlist.length) return
+    if (this.out) resetToBaseline(this.out) // self-heals if a prior VGM session left the chip dirty
     this.resetAll()
     this.index = i
     try {
       const r = buildEventList(this.playlist[i].path)
       this.events = r.events
       this.duration = r.duration
-    } catch {
+    } catch (e) {
+      console.error(`   ! failed to load ${this.playlist[i].path}: ${e.message}`)
       this.events = []
       this.duration = 0
     }
@@ -1220,9 +1296,27 @@ async function cmdServe(argv) {
   console.log(`folder: ${folder}  (${files.length} tracks)   device: ${engine.deviceName || 'none'}`)
   console.log('Ctrl-C to stop.')
 
-  process.on('SIGINT', () => {
+  const serveCleanup = () => {
+    if (engine.out) resetToBaseline(engine.out)
     engine.allNotesOff()
+  }
+  process.on('SIGINT', () => {
+    serveCleanup()
     process.exit(0)
+  })
+  process.on('SIGTERM', () => {
+    serveCleanup()
+    process.exit(0)
+  })
+  process.on('uncaughtException', (err) => {
+    console.error('\ncrashed:', err.message || err)
+    serveCleanup()
+    process.exit(1)
+  })
+  process.on('unhandledRejection', (err) => {
+    console.error('\ncrashed (unhandled rejection):', err?.message || err)
+    serveCleanup()
+    process.exit(1)
   })
 }
 
@@ -1384,6 +1478,7 @@ function createRenderCleanup(engine, server) {
       /* ignore */
     }
     try {
+      if (engine.out) resetToBaseline(engine.out)
       engine.allNotesOff()
     } catch {
       /* ignore */
@@ -1731,7 +1826,7 @@ async function cmdRender(argv) {
   }
   const files = collectFiles(paths.map(resolveLib), argv.recursive)
   if (files.length === 0) {
-    console.error('No MIDI files found.')
+    console.error('No playable files found.')
     process.exit(1)
   }
 
@@ -1743,8 +1838,7 @@ async function cmdRender(argv) {
   if (argv.album && files.length > 1) {
     let totalDuration = argv.tail
     for (const f of files) {
-      const midi = new Midi(readMidiData(f))
-      totalDuration += midi.duration
+      totalDuration += trackDuration(f)
     }
     console.log(`Album: ${files.length} tracks, ${totalDuration.toFixed(1)}s total`)
     const outPath = argv.output || join(process.cwd(), `album.${tag}.mp4`)
@@ -1762,8 +1856,7 @@ async function cmdRender(argv) {
 
   // --- Single file ---
   if (files.length === 1) {
-    const midi = new Midi(readMidiData(files[0]))
-    const totalDuration = midi.duration + argv.tail
+    const totalDuration = trackDuration(files[0]) + argv.tail
     const outPath = argv.output || join(process.cwd(), `${basename(files[0], extname(files[0]))}.${tag}.mp4`)
     await renderSession({
       playlist: [files[0]],
@@ -1782,8 +1875,7 @@ async function cmdRender(argv) {
   for (let i = 0; i < files.length; i++) {
     console.log(`\n[${i + 1}/${files.length}]`)
     try {
-      const midi = new Midi(readMidiData(files[i]))
-      const totalDuration = midi.duration + argv.tail
+      const totalDuration = trackDuration(files[i]) + argv.tail
       const outPath = join(process.cwd(), `${basename(files[i], extname(files[i]))}.${tag}.mp4`)
       await renderSession({
         playlist: [files[i]],
