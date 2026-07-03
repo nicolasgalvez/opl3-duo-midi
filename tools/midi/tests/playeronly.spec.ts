@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url'
 const PORT = 7410
 const toolDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const base = { baseURL: `http://127.0.0.1:${PORT}` }
-let proc
-let stateDir
+let proc: ChildProcess | undefined
+let stateDir: string | undefined
 
 test.beforeAll(async () => {
   stateDir = mkdtempSync(join(tmpdir(), 'opl-po-'))
@@ -37,7 +37,10 @@ test.afterAll(() => {
 })
 
 test('serves the validated player-only config', async () => {
-  const cfg = await (await fetch(`http://127.0.0.1:${PORT}/api/config`)).json()
+  const cfg = (await (await fetch(`http://127.0.0.1:${PORT}/api/config`)).json()) as {
+    output: string
+    features: Record<string, boolean>
+  }
   expect(cfg.output).toBe('soundfont')
   expect(cfg.features.menu).toBe(false)
   expect(cfg.features.library).toBe(false)

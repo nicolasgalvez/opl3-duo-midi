@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import os from 'node:os'
 import { readMidiData } from '../src/adapters/fs/midiFile.ts'
 
-function riffRmid(smf) {
+function riffRmid(smf: Buffer) {
   const dataSize = smf.length
   const riffSize = 4 + 8 + dataSize + (dataSize % 2)
   const header = Buffer.alloc(20)

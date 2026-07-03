@@ -1,17 +1,26 @@
 import { test, expect } from '@playwright/test'
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { Page } from '@playwright/test'
+
+// These callbacks run inside the browser via evaluate(); give TS just enough DOM.
+declare function getComputedStyle(el: unknown): {
+  fontSize: string
+  backgroundColor: string
+  webkitTextStrokeWidth: string
+}
+declare const document: { body: unknown }
 
 // Verifies the v2 SPA reaches visual parity with the classic page for the
 // minimized and overlay layouts (driven here via the View menu).
 const PORT = 7411
 const toolDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const base = { baseURL: `http://127.0.0.1:${PORT}`, viewport: { width: 1280, height: 720 } }
-let proc
-let stateDir
+let proc: ChildProcess | undefined
+let stateDir: string | undefined
 
 test.beforeAll(async () => {
   stateDir = mkdtempSync(join(tmpdir(), 'opl-lay-'))
@@ -37,7 +46,7 @@ test.afterAll(() => {
   if (stateDir) rmSync(stateDir, { recursive: true, force: true })
 })
 
-async function setLayout(page, label) {
+async function setLayout(page: Page, label: string) {
   await page.getByRole('button', { name: 'View', exact: true }).click()
   await page.getByRole('menuitem', { name: label }).click()
 }
@@ -67,10 +76,10 @@ test('overlay: transparent bg, chrome hidden, corner equalizer, stroked title', 
 
   const box = await page.locator('.eq').boundingBox()
   expect(box).not.toBeNull()
-  expect(box.width).toBeLessThanOrEqual(120)
-  expect(box.height).toBeLessThanOrEqual(120)
-  expect(box.x).toBeGreaterThan(900)
-  expect(box.y).toBeGreaterThan(500)
+  expect(box!.width).toBeLessThanOrEqual(120)
+  expect(box!.height).toBeLessThanOrEqual(120)
+  expect(box!.x).toBeGreaterThan(900)
+  expect(box!.y).toBeGreaterThan(500)
 
   const stroke = await page.locator('.np-name').evaluate((el) => getComputedStyle(el).webkitTextStrokeWidth)
   expect(parseFloat(stroke)).toBeGreaterThan(0)

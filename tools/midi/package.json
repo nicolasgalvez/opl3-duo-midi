@@ -9,8 +9,8 @@
   "scripts": {
     "typecheck": "tsc",
     "test": "npm run test:unit && playwright test",
-    "test:unit": "node --test tests/*.test.mjs",
-    "test:audio": "node tests/audio-capture.integration.mjs",
+    "test:unit": "node --test tests/*.test.ts",
+    "test:audio": "node tests/audio-capture.integration.ts",
     "test:render": "playwright test render"
   },
   "dependencies": {

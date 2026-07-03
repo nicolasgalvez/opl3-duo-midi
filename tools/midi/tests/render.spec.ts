@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test'
-import { startTestServer, stopTestServer } from './server-helper.mjs'
+import { startTestServer, stopTestServer } from './server-helper.ts'
+import type { ChildProcess } from 'node:child_process'
+
+// These callbacks run inside the browser via evaluate(); give TS just enough DOM.
+declare const document: {
+  body: { scrollWidth: number; clientWidth: number; scrollHeight: number; clientHeight: number }
+}
 
 // The render page (web/render.html) is served by an `opl serve` instance booted
 // for this spec on its own port. (The global Playwright webServer was removed in
@@ -8,7 +14,7 @@ const PORT = 7393
 const BASE = `http://127.0.0.1:${PORT}`
 test.use({ baseURL: BASE })
 
-let proc
+let proc: ChildProcess | undefined
 test.beforeAll(async () => {
   proc = await startTestServer(null, PORT)
 })
@@ -36,11 +42,11 @@ test('equalizer canvas fills a significant portion of the viewport', async ({ pa
   await page.goto('/render.html')
   await expect(page.locator('#track-name')).toContainText('scale', { timeout: 5000 })
 
-  const vh = page.viewportSize().height
+  const vh = page.viewportSize()!.height
   const box = await page.locator('#eq').boundingBox()
   expect(box).not.toBeNull()
   // With no art, the EQ should claim most of the screen
-  expect(box.height).toBeGreaterThan(vh * 0.35)
+  expect(box!.height).toBeGreaterThan(vh * 0.35)
 })
 
 test('CRT scanline overlay is present', async ({ page }) => {
@@ -50,11 +56,12 @@ test('CRT scanline overlay is present', async ({ page }) => {
 })
 
 test.describe('aspect ratio layouts', () => {
-  for (const [name, size] of [
+  const layouts: [string, { width: number; height: number }][] = [
     ['16:9 landscape', { width: 1280, height: 720 }],
     ['9:16 vertical', { width: 720, height: 1280 }],
     ['1:1 square', { width: 1080, height: 1080 }],
-  ]) {
+  ]
+  for (const [name, size] of layouts) {
     test(`render page adapts to ${name}`, async ({ browser }) => {
       const page = await browser.newPage({ viewport: size, baseURL: BASE })
       await page.goto('/render.html')

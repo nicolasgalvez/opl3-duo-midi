@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test'
-import { startTestServer, stopTestServer } from './server-helper.mjs'
+import { startTestServer, stopTestServer } from './server-helper.ts'
+import type { ChildProcess } from 'node:child_process'
+
+// These callbacks run inside the browser via evaluate(); give TS just enough DOM.
+declare function getComputedStyle(el: unknown): { fontSize: string; backgroundColor: string }
+declare const document: { body: unknown }
 
 // The headless renderer page (web/render.html) is independent of the player UI
 // and is always served from web/. These verify its minimized + overlay layouts.
@@ -7,7 +12,7 @@ import { startTestServer, stopTestServer } from './server-helper.mjs'
 
 test.describe('minimized render page', () => {
   const PORT = 7391
-  let proc
+  let proc: ChildProcess | undefined
   test.beforeAll(async () => {
     proc = await startTestServer('minimized', PORT)
   })
@@ -26,7 +31,7 @@ test.describe('minimized render page', () => {
 
 test.describe('overlay render page', () => {
   const PORT = 7392
-  let proc
+  let proc: ChildProcess | undefined
   test.beforeAll(async () => {
     proc = await startTestServer('overlay', PORT)
   })
@@ -42,7 +47,7 @@ test.describe('overlay render page', () => {
     expect(bg).toBe('rgba(0, 0, 0, 0)')
     const eqBox = await page.locator('#eq').boundingBox()
     expect(eqBox).not.toBeNull()
-    expect(eqBox.width).toBeLessThanOrEqual(120)
+    expect(eqBox!.width).toBeLessThanOrEqual(120)
     await page.close()
   })
 })

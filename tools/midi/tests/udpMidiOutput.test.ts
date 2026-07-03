@@ -4,8 +4,8 @@ import dgram from 'node:dgram'
 import { UdpMidiOutput } from '../src/adapters/net/udpMidiOutput.ts'
 import { DEFAULT_MIDI_UDP_PORT } from '../src/contracts/net.ts'
 
-function withUdpServer(fn) {
-  return new Promise((resolve, reject) => {
+function withUdpServer(fn: (server: dgram.Socket, port: number) => Promise<void>): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
     const server = dgram.createSocket('udp4')
     server.on('error', reject)
     server.bind(0, '127.0.0.1', async () => {
@@ -35,7 +35,7 @@ test('UdpMidiOutput.name identifies the network target', () => {
 
 test('UdpMidiOutput.send delivers raw MIDI bytes over UDP to host:port', async () => {
   await withUdpServer(async (server, port) => {
-    const received = new Promise((resolve) => server.once('message', resolve))
+    const received = new Promise<Buffer>((resolve) => server.once('message', resolve))
     const out = new UdpMidiOutput('127.0.0.1', port)
     out.send('noteon', { note: 60, velocity: 100, channel: 0 })
     const msg = await received
@@ -46,7 +46,7 @@ test('UdpMidiOutput.send delivers raw MIDI bytes over UDP to host:port', async (
 
 test('UdpMidiOutput.send can deliver a sysex message', async () => {
   await withUdpServer(async (server, port) => {
-    const received = new Promise((resolve) => server.once('message', resolve))
+    const received = new Promise<Buffer>((resolve) => server.once('message', resolve))
     const out = new UdpMidiOutput('127.0.0.1', port)
     out.send('sysex', [0xf0, 0x7d, 0x00, 0xf7])
     const msg = await received

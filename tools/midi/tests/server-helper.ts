@@ -1,11 +1,11 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const toolDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 /** Boot opl serve for layout-specific browser tests. */
-export async function startTestServer(layout, port) {
+export async function startTestServer(layout: string | null, port: number): Promise<ChildProcess> {
   const args = ['opl.mjs', 'serve', './tests/fixtures', '--http', String(port)]
   if (layout) args.push('--layout', layout)
   const proc = spawn('node', args, { cwd: toolDir, stdio: 'pipe' })
@@ -23,6 +23,6 @@ export async function startTestServer(layout, port) {
   throw new Error(`Server on port ${port} failed to start (layout=${layout || 'normal'})`)
 }
 
-export function stopTestServer(proc) {
+export function stopTestServer(proc: ChildProcess | undefined): void {
   if (proc && !proc.killed) proc.kill('SIGTERM')
 }

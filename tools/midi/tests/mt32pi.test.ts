@@ -11,6 +11,8 @@ import {
   MT32_MELODIC_CHANNELS,
   Mt32Pi,
 } from '../src/core/mt32pi.ts'
+import type { MidiMessageData, MidiMessageType } from '../src/contracts/midi.ts'
+import type { MidiOutput } from '../src/ports/midiOutput.ts'
 
 // Byte layout confirmed against ~/code/mt32-pi src/mt32pi.cpp (TCustomSysExCommand, ParseCustomSysEx).
 
@@ -68,8 +70,12 @@ test('MT32_MELODIC_CHANNELS is channels 2-9 (1-based); channel 1 and 10 excluded
 })
 
 test('Mt32Pi wraps a generic MIDI output and sends the correct sysex bytes', () => {
-  const sent = []
-  const out = { send: (type, data) => sent.push({ type, data }) }
+  const sent: { type: MidiMessageType; data: MidiMessageData | undefined }[] = []
+  const out: MidiOutput = {
+    send: (type, data) => {
+      sent.push({ type, data })
+    },
+  }
   const device = new Mt32Pi(out)
 
   device.reboot()

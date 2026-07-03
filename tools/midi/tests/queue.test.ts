@@ -74,7 +74,7 @@ test('nextPending returns the oldest pending job, or null when none', async () =
     assert.equal(q.nextPending(), null)
     const a = await q.add({ paths: ['a.mid'] })
     await q.add({ paths: ['b.mid'] })
-    assert.equal(q.nextPending().id, a.id)
+    assert.equal(q.nextPending()!.id, a.id)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -86,12 +86,12 @@ test('setStatus updates a job in place and persists it', async () => {
     const q = await openQueue(file)
     const job = await q.add({ paths: ['a.mid'] })
     await q.setStatus(job.id, 'running', { startedAt: '2026-01-01T00:00:00.000Z' })
-    assert.equal(q.list()[0].status, 'running')
-    assert.equal(q.list()[0].startedAt, '2026-01-01T00:00:00.000Z')
+    assert.equal(q.list()[0]!.status, 'running')
+    assert.equal(q.list()[0]!.startedAt, '2026-01-01T00:00:00.000Z')
 
     // Persistence: reopen from the same file and confirm the update survived.
     const reopened = await openQueue(file)
-    assert.equal(reopened.list()[0].status, 'running')
+    assert.equal(reopened.list()[0]!.status, 'running')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -122,7 +122,7 @@ test('nextPending skips running/done/failed jobs', async () => {
     const a = await q.add({ paths: ['a.mid'] })
     const b = await q.add({ paths: ['b.mid'] })
     await q.setStatus(a.id, 'done')
-    assert.equal(q.nextPending().id, b.id)
+    assert.equal(q.nextPending()!.id, b.id)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

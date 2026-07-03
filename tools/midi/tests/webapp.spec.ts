@@ -1,9 +1,13 @@
 import { test, expect } from '@playwright/test'
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+// These callbacks run inside the browser via evaluate(); give TS just enough DOM.
+declare function getComputedStyle(el: unknown): { getPropertyValue(name: string): string }
+declare const document: { documentElement: unknown }
 
 // Boots the Web Player v2 SPA (opl serve --ui v2) on its own port and drives the
 // real built bundle in a browser.
@@ -11,8 +15,8 @@ const PORT = 7396
 const toolDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const fixture = join(toolDir, 'tests', 'fixtures', 'scale.mid')
 const base = { baseURL: `http://127.0.0.1:${PORT}` }
-let proc
-let stateDir
+let proc: ChildProcess | undefined
+let stateDir: string | undefined
 
 test.beforeAll(async () => {
   // Isolate the library DB + uploads so the test never touches repo state.
@@ -103,7 +107,7 @@ test('File ▸ Open shows a path dialog', async ({ browser }) => {
 
 test('transport Play posts to /api', async ({ browser }) => {
   const page = await browser.newPage(base)
-  const posted = []
+  const posted: (string | undefined)[] = []
   await page.route('**/api', async (route) => {
     posted.push(JSON.parse(route.request().postData() || '{}').action)
     await route.fulfill({ status: 200, body: 'ok' })
@@ -163,7 +167,7 @@ test('SoundFont mode: switching output + Play synthesizes audio in-browser', asy
 
 test('playlist row exposes reorder + remove controls that post to /api', async ({ browser }) => {
   const page = await browser.newPage(base)
-  const posted = []
+  const posted: (string | undefined)[] = []
   await page.route('**/api', async (route) => {
     posted.push(JSON.parse(route.request().postData() || '{}'))
     await route.fulfill({ status: 200, body: 'ok' })

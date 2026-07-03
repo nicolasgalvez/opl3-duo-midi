@@ -14,7 +14,7 @@
     "prepare": "husky",
     "format": "npm run format:cpp && npm run format:js",
     "format:cpp": "git ls-files '*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hpp' '*.ino' | xargs clang-format -i",
-    "format:js": "prettier --write \"tools/midi/**/*.{js,mjs}\"",
+    "format:js": "prettier --write \"tools/midi/**/*.{js,mjs}\" \"tools/midi/{src,tests}/**/*.ts\" \"tools/midi/*.ts\"",
     "lint": "eslint tools/midi",
     "test": "npm run test --workspace=tools/midi",
     "test:unit": "npm run test:unit --workspace=tools/midi",
@@ -23,6 +23,14 @@
   "lint-staged": {
     "*.{c,cc,cpp,cxx,h,hpp,ino}": "clang-format -i",
     "tools/midi/**/*.{js,mjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "tools/midi/{src,tests}/**/*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "tools/midi/*.ts": [
       "eslint --fix",
       "prettier --write"
     ],
@@ -37,6 +45,7 @@
     "globals": "^17.7.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.8",
-    "prettier": "^3.9.3"
+    "prettier": "^3.9.3",
+    "typescript-eslint": "^8.62.1"
   }
 }
