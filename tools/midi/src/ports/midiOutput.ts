@@ -6,5 +6,11 @@ import type { MidiMessageType, MidiMessageData } from '../contracts/midi.ts'
  * (adapters/net/udpMidiOutput.ts) transports.
  */
 export interface MidiOutput {
-  send(type: MidiMessageType, data: MidiMessageData): void
+  send(type: MidiMessageType, data?: MidiMessageData): void
+}
+
+/** A MidiOutput bound to a real transport that must be released when done. */
+export interface ClosableMidiOutput extends MidiOutput {
+  readonly name: string
+  close(): void
 }

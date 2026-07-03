@@ -21,12 +21,12 @@ const CHANNEL_TYPES: Record<string, number | undefined> = {
   pitch: 0xe,
 }
 
-export function encodeMidiMessage(type: MidiMessageType, args: MidiMessageData): number[] {
+export function encodeMidiMessage(type: MidiMessageType, args?: MidiMessageData): number[] {
   const bytes: number[] = []
 
   const statusNibble = CHANNEL_TYPES[type]
   if (statusNibble !== undefined) {
-    bytes.push((statusNibble << 4) + ((args as { channel?: number }).channel || 0))
+    bytes.push((statusNibble << 4) + ((args as { channel?: number } | undefined)?.channel || 0))
   } else if (type === 'sysex') {
     bytes.push(0xf0)
   } else {

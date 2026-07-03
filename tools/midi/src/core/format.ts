@@ -4,6 +4,12 @@
 
 export type TrackFormat = 'midi' | 'vgm'
 
+export const MIDI_EXTS = ['.mid', '.midi']
+// Extensions swept up by directory/folder scans (collectFiles). Actual format
+// dispatch is always by content (detectFormat), never by extension — this
+// list only decides which files a folder walk bothers to pick up.
+export const PLAYABLE_EXTS = [...MIDI_EXTS, '.vgm']
+
 function fourCc(buf: Buffer, offset: number): string {
   return buf.length >= offset + 4 ? buf.toString('ascii', offset, offset + 4) : ''
 }

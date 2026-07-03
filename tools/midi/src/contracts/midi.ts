@@ -33,6 +33,10 @@ export type MidiMessage =
   | { type: 'program'; data: ProgramMessage }
   | { type: 'pitch'; data: PitchMessage }
   | { type: 'sysex'; data: SysexMessage }
+  // MIDI System Reset (0xFF real-time byte); no payload. USB (easymidi)
+  // honors it, transports that can't encode it throw — callers treat it as
+  // best-effort (see resetToBaseline).
+  | { type: 'reset'; data?: undefined }
 
 export type MidiMessageType = MidiMessage['type']
 export type MidiMessageData = MidiMessage['data']
