@@ -7,7 +7,7 @@ import { basename } from 'node:path'
 // processes against the same queue file.
 
 export async function openQueue(dbPath) {
-  const db = await JSONFilePreset(dbPath, { jobs: [], seq: 0 })
+  const db = await JSONFilePreset(dbPath, { jobs: [], seq: 0, runnerPid: null })
   return new RenderQueue(db)
 }
 
@@ -49,6 +49,26 @@ export class RenderQueue {
     const removed = this.db.data.jobs.length < before
     if (removed) await this.db.write()
     return removed
+  }
+
+  /** Drop every job regardless of status. Returns how many were removed. */
+  async clear() {
+    const count = this.db.data.jobs.length
+    if (count) {
+      this.db.data.jobs = []
+      await this.db.write()
+    }
+    return count
+  }
+
+  /** PID of the `opl queue run` process currently holding this queue, or null. */
+  runnerPid() {
+    return this.db.data.runnerPid ?? null
+  }
+
+  async setRunnerPid(pid) {
+    this.db.data.runnerPid = pid
+    await this.db.write()
   }
 
   /** The oldest job still awaiting a render, or null if none. */

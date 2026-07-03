@@ -127,3 +127,37 @@ test('nextPending skips running/done/failed jobs', async () => {
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('clear removes every job regardless of status and reports how many', async () => {
+  const { dir, file } = tmpDb()
+  try {
+    const q = await openQueue(file)
+    const a = await q.add({ paths: ['a.mid'] })
+    await q.add({ paths: ['b.mid'] })
+    await q.setStatus(a.id, 'failed')
+    assert.equal(await q.clear(), 2)
+    assert.deepEqual(q.list(), [])
+    assert.equal(await q.clear(), 0)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('runner PID: unset by default, persists across reopen, clears back to null', async () => {
+  const { dir, file } = tmpDb()
+  try {
+    const q = await openQueue(file)
+    assert.equal(q.runnerPid(), null)
+
+    await q.setRunnerPid(4242)
+    assert.equal(q.runnerPid(), 4242)
+
+    const reopened = await openQueue(file)
+    assert.equal(reopened.runnerPid(), 4242)
+
+    await q.setRunnerPid(null)
+    assert.equal(q.runnerPid(), null)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
