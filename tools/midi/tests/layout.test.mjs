@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { resolveLayout } from '../lib/layout.mjs'
+import { resolveLayout } from '../src/core/layout.ts'
 
 test('resolveLayout defaults to normal', () => {
   assert.equal(resolveLayout({}, {}), 'normal')
