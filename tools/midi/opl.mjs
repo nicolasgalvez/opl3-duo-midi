@@ -256,6 +256,11 @@ function resetToBaseline(out) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+// Set by renderSessionObs/renderSession while a track is actively rendering, so a
+// SIGINT/SIGTERM (Ctrl-C, or `opl queue stop` forwarding its signal to this child)
+// can silence the chip and stop OBS instead of just killing the process mid-recording.
+let activeRenderCleanup = null
+
 // --------------------------------------------------------------------------
 //  Simple commands
 // --------------------------------------------------------------------------
@@ -1612,6 +1617,31 @@ async function renderSessionObs({ playlist, singleMode, totalDuration, outPath, 
     process.exit(1)
   }
 
+  activeRenderCleanup = async () => {
+    try {
+      cap.stop()
+    } catch {
+      /* ignore */
+    }
+    try {
+      engine.stop()
+      if (engine.out) resetToBaseline(engine.out)
+    } catch {
+      /* ignore */
+    }
+    try {
+      await stopObsRecording(obs)
+    } catch {
+      /* ignore — may not have started recording yet */
+    }
+    try {
+      await obs.disconnect()
+    } catch {
+      /* ignore */
+    }
+    cleanup()
+  }
+
   try {
     await startObsRecording(obs)
     await waitForObsRecording(obs)
@@ -1678,6 +1708,7 @@ async function renderSessionObs({ playlist, singleMode, totalDuration, outPath, 
     process.exit(1)
   }
 
+  activeRenderCleanup = null
   cleanup()
   if (!argv.keepTemps) {
     try {
@@ -1819,6 +1850,23 @@ async function cmdRender(argv) {
     return
   }
 
+  // Ctrl-C, or a SIGTERM forwarded by `opl queue stop`: silence the chip and stop
+  // OBS/audio capture for whichever track is currently rendering, instead of just
+  // killing the process mid-recording and leaving hardware/OBS in a stuck state.
+  const onInterrupt = (signal) => async () => {
+    console.log(`\n${signal} received, stopping render...`)
+    if (activeRenderCleanup) {
+      try {
+        await activeRenderCleanup()
+      } catch {
+        /* best-effort */
+      }
+    }
+    process.exit(signal === 'SIGINT' ? 0 : 1)
+  }
+  process.on('SIGINT', onInterrupt('SIGINT'))
+  process.on('SIGTERM', onInterrupt('SIGTERM'))
+
   // Resolve paths (file(s) or folder(s))
   const paths = argv.paths || []
   if (paths.length === 0) {
@@ -1936,12 +1984,53 @@ async function cmdQueueRemove(argv) {
   console.log(removed ? `Removed #${argv.id}.` : `No job #${argv.id} found.`)
 }
 
+async function cmdQueueClear() {
+  const queue = await openQueue(queueDbPath())
+  const count = await queue.clear()
+  console.log(count ? `Cleared ${count} job(s).` : 'Queue is already empty.')
+}
+
+// Sends SIGTERM to the process that owns `opl queue run` (tracked via its PID in the
+// queue file), if one is currently running. That process's own SIGTERM handler is
+// responsible for stopping its active child render cleanly (chip reset, OBS stop).
+async function cmdQueueStop() {
+  const queue = await openQueue(queueDbPath())
+  const pid = queue.runnerPid()
+  if (!pid) {
+    console.log('No queue runner is currently running.')
+    return
+  }
+  try {
+    process.kill(pid, 'SIGTERM')
+    console.log(`Sent stop signal to queue runner (pid ${pid}).`)
+  } catch (e) {
+    console.log(`Queue runner (pid ${pid}) is not running (${e.code === 'ESRCH' ? 'already exited' : e.message}).`)
+    await queue.setRunnerPid(null)
+  }
+}
+
 async function cmdQueueRun(argv) {
   const queue = await openQueue(queueDbPath())
   const scriptPath = fileURLToPath(import.meta.url)
   console.log(`Queue runner started${argv.watch ? ' (--watch)' : ''}.`)
+  await queue.setRunnerPid(process.pid)
 
-  while (true) {
+  let activeChild = null
+  let stopping = false
+  const onStop = (signal) => {
+    if (stopping) return
+    stopping = true
+    console.log(
+      `\nQueue runner received ${signal}, stopping${activeChild ? ' (waiting for the active render to clean up)' : ''}...`,
+    )
+    if (activeChild)
+      activeChild.kill(signal) // its own SIGINT/SIGTERM handler resets the chip + stops OBS
+    else process.exit(0)
+  }
+  process.on('SIGINT', () => onStop('SIGINT'))
+  process.on('SIGTERM', () => onStop('SIGTERM'))
+
+  while (!stopping) {
     await queue.refresh() // pick up jobs added by a separate `opl queue add` process
     const job = queue.nextPending()
     if (!job) {
@@ -1954,12 +2043,17 @@ async function cmdQueueRun(argv) {
     await queue.setStatus(job.id, 'running', { startedAt: new Date().toISOString() })
     const flags = serializeRenderArgs(job.args)
     const code = await new Promise((resolveExit) => {
-      const child = spawn(process.execPath, [scriptPath, 'render', ...job.paths, ...flags], { stdio: 'inherit' })
-      child.on('close', resolveExit)
-      child.on('error', () => resolveExit(-1))
+      activeChild = spawn(process.execPath, [scriptPath, 'render', ...job.paths, ...flags], { stdio: 'inherit' })
+      activeChild.on('close', resolveExit)
+      activeChild.on('error', () => resolveExit(-1))
     })
+    activeChild = null
 
-    if (code === 0) {
+    if (stopping) {
+      await queue.setStatus(job.id, 'failed', { finishedAt: new Date().toISOString(), error: 'stopped by user' })
+      console.log(`[#${job.id}] stopped: ${job.label}`)
+      break
+    } else if (code === 0) {
       await queue.setStatus(job.id, 'done', { finishedAt: new Date().toISOString() })
       console.log(`[#${job.id}] done: ${job.label}`)
     } else {
@@ -1967,7 +2061,9 @@ async function cmdQueueRun(argv) {
       console.error(`[#${job.id}] FAILED (exit ${code}): ${job.label}`)
     }
   }
-  console.log('Queue empty. Exiting.')
+  await queue.setRunnerPid(null)
+  console.log(stopping ? 'Queue runner stopped.' : 'Queue empty. Exiting.')
+  process.exit(0)
 }
 
 // --------------------------------------------------------------------------
@@ -2108,6 +2204,7 @@ yargs(hideBin(process.argv))
           (yy) => yy.positional('id', { type: 'number', describe: 'job id, from `opl queue list`' }),
           cmdQueueRemove,
         )
+        .command('clear', 'remove every queued job, regardless of status', () => {}, cmdQueueClear)
         .command(
           'run',
           'process pending jobs one at a time, spawning `opl render` for each',
@@ -2118,6 +2215,12 @@ yargs(hideBin(process.argv))
               describe: 'keep polling for newly-added jobs instead of exiting once the queue is empty',
             }),
           cmdQueueRun,
+        )
+        .command(
+          'stop',
+          'stop the currently-running `opl queue run` (cleanly: resets the chip, stops OBS)',
+          () => {},
+          cmdQueueStop,
         )
         .demandCommand(1, 'Pick a queue subcommand (try --help).'),
     () => {},
