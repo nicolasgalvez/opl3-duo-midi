@@ -68,7 +68,8 @@ loadEnv()
 yargs(hideBin(process.argv))
   .scriptName('opl')
   .usage('$0 <command> [options]')
-  .option('port', { type: 'string', describe: 'output port name substring (default: OPL3Duo)' })
+  .option('device', { type: 'string', describe: 'MIDI output device name substring (default: OPL3Duo)' })
+  .option('port', { type: 'string', describe: 'MIDI output device name substring (older spelling of --device)' })
   .option('host', {
     type: 'string',
     describe: 'send MIDI over UDP to this network host instead of USB (e.g. an mt32-pi; or OPL_MIDI_HOST)',
@@ -127,7 +128,12 @@ yargs(hideBin(process.argv))
         .option('ch', { type: 'number', default: 1 }),
     (argv) => cmdCc(argv as unknown as CcArgv),
   )
-  .command('panic', 'silence all stuck notes', () => {}, (argv) => cmdPanic(argv as GlobalArgv))
+  .command(
+    'panic',
+    'silence all stuck notes',
+    () => {},
+    (argv) => cmdPanic(argv as GlobalArgv),
+  )
   .command(
     'play <paths..>',
     'play .mid file(s) or folder(s)',
@@ -228,7 +234,12 @@ yargs(hideBin(process.argv))
     'mt32-pi device control (custom SysEx + FTP SoundFont management)',
     (y) =>
       y
-        .command('reboot', 'reboot the mt32-pi', () => {}, (argv) => cmdMt32Reboot(argv as GlobalArgv))
+        .command(
+          'reboot',
+          'reboot the mt32-pi',
+          () => {},
+          (argv) => cmdMt32Reboot(argv as GlobalArgv),
+        )
         .command(
           'rom <romSet>',
           'switch MT-32 ROM set',
@@ -247,11 +258,8 @@ yargs(hideBin(process.argv))
           (yy) => yy.positional('state', { type: 'string', choices: ['on', 'off'] }),
           (argv) => cmdMt32Stereo(argv as unknown as GlobalArgv & { state: string }),
         )
-        .command(
-          'soundfonts',
-          "list SoundFonts on the device's storage (via FTP)",
-          addMt32FtpOptions,
-          (argv) => cmdMt32SoundFonts(argv as unknown as Mt32FtpArgv),
+        .command('soundfonts', "list SoundFonts on the device's storage (via FTP)", addMt32FtpOptions, (argv) =>
+          cmdMt32SoundFonts(argv as unknown as Mt32FtpArgv),
         )
         .command(
           'soundfont <nameOrIndex>',
