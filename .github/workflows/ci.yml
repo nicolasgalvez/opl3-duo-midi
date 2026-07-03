@@ -54,3 +54,62 @@ jobs:
       - name: E2E (Playwright, deterministic)
         working-directory: tools/midi
         run: npx playwright test --grep-invert "synthesizes audio"
+
+  # Full `opl render` pipeline (ODM-13): fluidsynth + the TimGM6mb GM soundfont
+  # stand in for the OPL3 Duo hardware, and a loopback audio device stands in
+  # for the board's analog capture — so the real MIDI -> synth -> capture ->
+  # browser video -> mux chain runs on both Linux and macOS.
+  render-e2e:
+    name: render e2e (fluidsynth, ${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            # snd-aloop: playback written to device 0 appears as capture on
+            # device 1 — fluidsynth plays into ,0 and RtAudio records from ,1.
+            audio-device: 'Loopback,1'
+          - os: macos-latest
+            audio-device: 'BlackHole 2ch'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Audio loopback + fluidsynth (Linux, ALSA snd-aloop)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libpulse0 fluidsynth ffmpeg "linux-modules-extra-$(uname -r)"
+          sudo modprobe snd-aloop
+          echo "OPL_FLUID_AUDIO_DEVICE=plughw:Loopback,0,0" >> "$GITHUB_ENV"
+          cat /proc/asound/cards
+
+      - name: Audio loopback + fluidsynth (macOS, BlackHole)
+        if: runner.os == 'macOS'
+        run: |
+          brew install fluid-synth blackhole-2ch ffmpeg
+          # BlackHole is a CoreAudio HAL plugin; coreaudiod must reload to see
+          # it. fluidsynth then plays straight into it (audio.coreaudio.device)
+          # — the system default output never changes.
+          sudo killall coreaudiod || true
+          sleep 3
+          echo "OPL_FLUID_AUDIO_DEVICE=BlackHole 2ch" >> "$GITHUB_ENV"
+
+      - name: Install root + CLI deps
+        run: npm ci
+
+      - name: Install Playwright (chromium)
+        working-directory: tools/midi
+        run: npx playwright install --with-deps chromium
+
+      - name: Full render pipeline e2e
+        working-directory: tools/midi
+        env:
+          OPL_RENDER_E2E: '1'
+          OPL_AUDIO_DEVICE: ${{ matrix.audio-device }}
+        run: npm run test:e2e:render
