@@ -30,8 +30,19 @@ function haveBin(bin: string): boolean {
   return spawnSync('which', [bin], { encoding: 'utf8' }).status === 0
 }
 
+// MIDI transport into fluidsynth:
+//  - 'port' (default): fluidsynth registers a real MIDI input (CoreMIDI /
+//    ALSA sequencer) and `opl render --device fluid` targets it.
+//  - 'udp': for hosts with no kernel ALSA sequencer (GitHub's Azure kernels
+//    ship no sound modules), `opl render --host 127.0.0.1` sends over opl's
+//    own UDP transport into tests/fluidUdpBridge.ts -> fluidsynth TCP shell.
+const MIDI_MODE = process.env.OPL_FLUID_MIDI === 'udp' ? 'udp' : 'port'
+const BRIDGE_UDP_PORT = 17999
+const FLUID_SHELL_PORT = 9801
+
 function fluidsynthArgs(): string[] {
-  // -s: keep running as a server; -i: no interactive shell; -g: gain.
+  // -s: keep running as a server (TCP shell); -i: no interactive shell;
+  // -g: gain; -n (udp mode): don't open a MIDI driver at all.
   // OPL_FLUID_AUDIO_DRIVER picks fluidsynth's audio backend (coreaudio on
   // macOS; alsa or pulseaudio on Linux), and OPL_FLUID_AUDIO_DEVICE aims it
   // at the loopback device directly (no need to change the system default
@@ -41,7 +52,35 @@ function fluidsynthArgs(): string[] {
   const driver = process.env.OPL_FLUID_AUDIO_DRIVER || (darwin ? 'coreaudio' : 'alsa')
   const device = process.env.OPL_FLUID_AUDIO_DEVICE
   const target = device ? ['-o', `audio.${driver}.device=${device}`] : []
-  return ['-si', '-g', '1', '-a', driver, ...target, '-m', darwin ? 'coremidi' : 'alsa_seq', SOUNDFONT]
+  const midi =
+    MIDI_MODE === 'udp' ? ['-n', '-o', `shell.port=${FLUID_SHELL_PORT}`] : ['-m', darwin ? 'coremidi' : 'alsa_seq']
+  return ['-si', '-g', '1', '-a', driver, ...target, ...midi, SOUNDFONT]
+}
+
+/** In udp mode, spawn the UDP->fluidsynth-shell bridge and wait for it. */
+function startBridge(): Promise<ChildProcess> {
+  const bridge = spawn(
+    process.execPath,
+    [join(here, 'fluidUdpBridge.ts'), String(BRIDGE_UDP_PORT), String(FLUID_SHELL_PORT)],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
+  )
+  return new Promise((resolve, reject) => {
+    let log = ''
+    const timer = setTimeout(() => reject(new Error(`bridge never became ready:\n${log}`)), 30_000)
+    const onData = (d: Buffer) => {
+      log += d
+      if (log.includes('bridge: ready')) {
+        clearTimeout(timer)
+        resolve(bridge)
+      }
+    }
+    bridge.stdout?.on('data', onData)
+    bridge.stderr?.on('data', onData)
+    bridge.on('exit', (code) => {
+      clearTimeout(timer)
+      reject(new Error(`bridge exited early (${code}):\n${log}`))
+    })
+  })
 }
 
 function oplSync(args: string[], timeoutMs = 120_000) {
@@ -116,15 +155,23 @@ test(
     fluid.stdout?.on('data', (d: Buffer) => (fluidLog += d))
     fluid.stderr?.on('data', (d: Buffer) => (fluidLog += d))
 
+    let bridge: ChildProcess | null = null
     try {
-      const port = await waitForFluidPort(() => fluidLog)
-      console.log(`fluidsynth MIDI port: ${port}`)
+      let midiArgs: string[]
+      if (MIDI_MODE === 'udp') {
+        bridge = await startBridge()
+        console.log(`fluidsynth MIDI via UDP bridge on ${BRIDGE_UDP_PORT}`)
+        midiArgs = ['--host', '127.0.0.1', '--net-port', String(BRIDGE_UDP_PORT)]
+      } else {
+        const port = await waitForFluidPort(() => fluidLog)
+        console.log(`fluidsynth MIDI port: ${port}`)
+        midiArgs = ['--device', 'fluid']
+      }
 
       const render = oplSync([
         'render',
         TRACK,
-        '--device',
-        'fluid',
+        ...midiArgs,
         '--audio-device',
         audioDevice,
         '--resolution',
@@ -160,6 +207,7 @@ test(
       console.log(`mean_volume: ${mean} dB`)
       assert.ok(mean > -70, `rendered audio is silent (mean_volume ${mean} dB) — MIDI->synth->capture chain broken`)
     } finally {
+      bridge?.kill('SIGTERM')
       fluid.kill('SIGTERM')
       rmSync(tmpDir, { recursive: true, force: true })
     }

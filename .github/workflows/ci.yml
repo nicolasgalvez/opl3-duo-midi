@@ -66,9 +66,9 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            # snd-aloop: playback written to device 0 appears as capture on
-            # device 1 — fluidsynth plays into ,0 and RtAudio records from ,1.
-            audio-device: 'Loopback,1'
+            # RtAudio's Pulse backend exposes this fixed device name; the
+            # default source is pointed at the null sink's monitor below.
+            audio-device: 'PulseAudio'
           - os: macos-latest
             audio-device: 'BlackHole 2ch'
     runs-on: ${{ matrix.os }}
@@ -80,16 +80,21 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Audio loopback + fluidsynth (Linux, ALSA snd-aloop)
+      # All userspace: Azure 6.x runner kernels ship no sound modules at all
+      # (no snd-aloop, no snd-seq), so both the audio loopback (Pulse null
+      # sink) and the MIDI transport (opl's own UDP adapter -> fluidsynth's
+      # TCP shell, via tests/fluidUdpBridge.ts) avoid the kernel entirely.
+      - name: Audio loopback + fluidsynth (Linux, Pulse null sink)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libpulse0 fluidsynth ffmpeg "linux-modules-extra-$(uname -r)"
-          # snd-aloop: the loopback card; snd-seq: the ALSA sequencer that
-          # both RtMidi (easymidi) and fluidsynth's MIDI driver require.
-          sudo modprobe snd-aloop snd-seq
-          echo "OPL_FLUID_AUDIO_DEVICE=plughw:Loopback,0,0" >> "$GITHUB_ENV"
-          cat /proc/asound/cards
+          sudo apt-get install -y libasound2-dev libasound2-plugins libpulse0 pulseaudio pulseaudio-utils fluidsynth ffmpeg
+          pulseaudio -D --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=oplsink
+          pactl set-default-sink oplsink
+          pactl set-default-source oplsink.monitor
+          echo "OPL_FLUID_AUDIO_DRIVER=pulseaudio" >> "$GITHUB_ENV"
+          echo "OPL_FLUID_MIDI=udp" >> "$GITHUB_ENV"
 
       - name: Audio loopback + fluidsynth (macOS, BlackHole)
         if: runner.os == 'macOS'
