@@ -20,22 +20,23 @@
 import { readdirSync, readFileSync, writeFileSync, statSync, mkdtempSync, rmSync, existsSync, mkdirSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { basename, extname, join, dirname } from 'node:path'
-import { loadEnv, resolveLib, MIDI_TOOL_DIR } from './lib/paths.mjs'
-import { extractMidiBuffer } from './lib/midiFile.mjs'
+import { loadEnv, resolveLib, MIDI_TOOL_DIR } from './src/adapters/fs/paths.ts'
+import { extractMidiBuffer } from './src/core/midiFile.ts'
 import { detectFormat } from './src/core/format.ts'
 import { parseVgm, toFlatEvents } from './src/core/vgm.ts'
 import { rawWriteSysEx, bankForPort } from './src/core/oplRaw.ts'
 import { buildControllerResetMessages, buildAllNotesOffMessages, sendMessages } from './src/core/midiReset.ts'
-import { isPlaylistFile, loadPlaylist } from './lib/playlist.mjs'
+import { isPlaylistFile } from './src/core/playlist.ts'
+import { loadPlaylist } from './src/adapters/fs/playlist.ts'
 import { toM3U, toJSPF } from './src/core/playlistWrite.ts'
 import { removeTrack as removeTrackPure, moveTrack as moveTrackPure } from './src/core/playlistEdit.ts'
-import { openLibrary } from './lib/library.mjs'
-import { openQueue } from './lib/queue.mjs'
+import { openLibrary } from './src/adapters/storage/library.ts'
+import { openQueue } from './src/adapters/storage/queue.ts'
 import { applyRenderOptions, extractRenderArgs, serializeRenderArgs } from './src/cli/renderOptions.ts'
 import { UdpMidiOutput } from './src/adapters/net/udpMidiOutput.ts'
 import { DEFAULT_MIDI_UDP_PORT } from './src/contracts/net.ts'
 import { resolveNetTarget } from './src/core/deviceTarget.ts'
-import { Mt32Pi, MT32_ROM_SETS, MT32_SYNTHS, MT32_DEFAULT_TEST_CHANNEL } from './lib/net/mt32pi.mjs'
+import { Mt32Pi, MT32_ROM_SETS, MT32_SYNTHS, MT32_DEFAULT_TEST_CHANNEL } from './src/core/mt32pi.ts'
 import {
   listSoundFonts,
   resolveSoundFontIndex,
@@ -43,8 +44,9 @@ import {
   DEFAULT_FTP_PORT,
   DEFAULT_FTP_USER,
   DEFAULT_FTP_PASSWORD,
-} from './lib/net/mt32piFtp.mjs'
-import { resolveConfig, validateConfig } from './lib/config.mjs'
+} from './src/adapters/net/mt32piFtp.ts'
+import { resolveConfig } from './src/adapters/fs/config.ts'
+import { validateConfig } from './src/contracts/config.ts'
 import { resolveLayout } from './src/core/layout.ts'
 import { resolveDimensions } from './src/core/presets.ts'
 import {
@@ -55,7 +57,7 @@ import {
   stopObsRecording,
   waitForFile,
   waitForObsRecording,
-} from './lib/obs.mjs'
+} from './src/adapters/obs.ts'
 import { buildMuxArgs, resolveAvOffset } from './src/core/mux.ts'
 import { nextPlaylistIndex, prevPlaylistIndex, shuffleOrder } from './src/core/playback.ts'
 import { EventEmitter } from 'node:events'

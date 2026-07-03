@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { sortSoundFontNames, findSoundFontIndex, isSoundFontFile } from '../lib/net/mt32piFtp.mjs'
+import { sortSoundFontNames, findSoundFontIndex, isSoundFontFile } from '../src/core/soundFonts.ts'
 
 // mt32-pi sorts its whole SoundFont list with strcasecmp() over the file path
 // (src/soundfontmanager.cpp: SoundFontListComparator) — case-insensitive, and

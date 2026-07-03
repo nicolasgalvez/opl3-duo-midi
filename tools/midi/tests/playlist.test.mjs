@@ -4,7 +4,8 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { parseM3U, parseJSPF, isPlaylistFile, loadPlaylist } from '../lib/playlist.mjs'
+import { parseM3U, parseJSPF, isPlaylistFile } from '../src/core/playlist.ts'
+import { loadPlaylist } from '../src/adapters/fs/playlist.ts'
 
 // ── pure parsers ──────────────────────────────────────────────────────────
 

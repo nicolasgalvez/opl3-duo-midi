@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { resolveObsOpts } from '../lib/obs.mjs'
+import { resolveObsOpts } from '../src/adapters/obs.ts'
 
 test('resolveObsOpts defaults', () => {
   assert.deepEqual(resolveObsOpts({}, {}), {

@@ -10,7 +10,7 @@ import {
   MT32_SYNTHS,
   MT32_MELODIC_CHANNELS,
   Mt32Pi,
-} from '../lib/net/mt32pi.mjs'
+} from '../src/core/mt32pi.ts'
 
 // Byte layout confirmed against ~/code/mt32-pi src/mt32pi.cpp (TCustomSysExCommand, ParseCustomSysEx).
 

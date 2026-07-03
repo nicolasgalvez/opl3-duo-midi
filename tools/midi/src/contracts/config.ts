@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs'
 import { z } from 'zod'
+import { LayoutSchema } from './layout.ts'
 
 // Runtime configuration for `opl serve`: drives defaults + feature flags so the
 // same app runs as the full desktop tool or a stripped-down embeddable player.
@@ -21,13 +21,15 @@ export const ConfigSchema = z
   .object({
     title: z.string().default('OPL · MIDI PLAYER'),
     theme: z.enum(['green', 'winamp', 'win98', 'amber']).default('green'),
-    layout: z.enum(['normal', 'minimized', 'overlay']).default('normal'),
+    layout: LayoutSchema.default('normal'),
     output: z.enum(['hardware', 'soundfont']).default('hardware'),
     features: FeaturesSchema,
   })
   .strict()
 
-export const PRESETS = {
+export type Config = z.infer<typeof ConfigSchema>
+
+export const PRESETS: Record<string, z.input<typeof ConfigSchema>> = {
   full: {},
   'player-only': {
     layout: 'minimized',
@@ -36,7 +38,7 @@ export const PRESETS = {
   },
 }
 
-export function validateConfig(raw) {
+export function validateConfig(raw: unknown): Config {
   const result = ConfigSchema.safeParse(raw ?? {})
   if (!result.success) {
     const msg = result.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')
@@ -45,40 +47,9 @@ export function validateConfig(raw) {
   return result.data
 }
 
-export function presetConfig(name) {
+export function presetConfig(name: string): Config {
   if (!Object.prototype.hasOwnProperty.call(PRESETS, name)) {
     throw new Error(`unknown preset: ${name} (have: ${Object.keys(PRESETS).join(', ')})`)
   }
   return validateConfig(PRESETS[name])
-}
-
-export function loadConfigFile(path) {
-  let text
-  try {
-    text = readFileSync(path, 'utf8')
-  } catch (e) {
-    throw new Error(`config file not found: ${path}`, { cause: e })
-  }
-  let raw
-  try {
-    raw = JSON.parse(text)
-  } catch (e) {
-    throw new Error(`config is not valid JSON (${path}): ${e.message}`, { cause: e })
-  }
-  // A config file may name a preset to extend.
-  if (raw && typeof raw === 'object' && raw.preset) {
-    const base = PRESETS[raw.preset]
-    if (!base) throw new Error(`unknown preset: ${raw.preset}`)
-    const over = { ...raw }
-    delete over.preset
-    raw = { ...base, ...over, features: { ...(base.features || {}), ...(over.features || {}) } }
-  }
-  return validateConfig(raw)
-}
-
-/** Resolve config from a preset name or a file path (preset takes precedence). */
-export function resolveConfig({ preset, file } = {}) {
-  if (preset) return presetConfig(preset)
-  if (file) return Object.prototype.hasOwnProperty.call(PRESETS, file) ? presetConfig(file) : loadConfigFile(file)
-  return validateConfig({})
 }

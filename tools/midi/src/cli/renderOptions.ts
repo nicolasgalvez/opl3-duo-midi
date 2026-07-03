@@ -1,4 +1,5 @@
 import type { Argv } from 'yargs'
+import type { RenderArgs } from '../contracts/render.ts'
 
 // Single source of truth for `opl render`'s CLI options, shared with
 // `opl queue add` (identical flags) and the queue runner (which needs to
@@ -18,9 +19,6 @@ export interface RenderOption {
   describe: string
   global?: boolean
 }
-
-/** The stored-job / parsed-argv shape: camelCased flag names to their values. */
-export type RenderArgs = Record<string, unknown>
 
 export const RENDER_OPTIONS: RenderOption[] = [
   { flag: 'recursive', alias: 'r', type: 'boolean', default: false, describe: 'recurse into subfolders' },
