@@ -65,7 +65,7 @@ test('extractRenderArgs + serializeRenderArgs round-trip a realistic queue job',
   const flags = serializeRenderArgs(extractRenderArgs(argv))
   // Order of flags isn't semantically meaningful for a CLI invocation -- assert as pairs.
   const pairs = new Set()
-  for (let i = 0; i < flags.length; ) {
+  for (let i = 0; i < flags.length;) {
     if (flags[i + 1]?.startsWith('--')) {
       pairs.add(flags[i])
       i += 1

@@ -29,6 +29,10 @@ jobs:
         working-directory: tools/midi/web-app
         run: npm ci
 
+      - name: Typecheck (tsc, strict)
+        working-directory: tools/midi
+        run: npm run typecheck
+
       - name: Node unit tests
         working-directory: tools/midi
         run: npm run test:unit

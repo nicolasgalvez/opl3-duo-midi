@@ -21,7 +21,7 @@ test('toJSPF emits valid JSPF with locations in order', () => {
   const data = JSON.parse(out)
   assert.equal(data.playlist.title, 'set')
   assert.deepEqual(
-    data.playlist.track.map((t) => t.location[0]),
+    data.playlist.track.map((t: { location: string[] }) => t.location[0]),
     ['/a/x.mid', '/a/y.mid'],
   )
 })

@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { encodeMidiMessage } from '../src/core/midiBytes.ts'
+import type { MidiMessageData, MidiMessageType, NoteMessage } from '../src/contracts/midi.ts'
 
 test('encodeMidiMessage: noteon', () => {
   assert.deepEqual(encodeMidiMessage('noteon', { note: 60, velocity: 100, channel: 0 }), [0x90, 60, 100])
@@ -11,7 +12,8 @@ test('encodeMidiMessage: noteon channel offset', () => {
 })
 
 test('encodeMidiMessage: noteon defaults channel to 0 when omitted', () => {
-  assert.deepEqual(encodeMidiMessage('noteon', { note: 60, velocity: 100 }), [0x90, 60, 100])
+  // Intentionally channel-less — the encoder must default it to 0.
+  assert.deepEqual(encodeMidiMessage('noteon', { note: 60, velocity: 100 } as NoteMessage), [0x90, 60, 100])
 })
 
 test('encodeMidiMessage: noteoff', () => {
@@ -56,5 +58,6 @@ test('encodeMidiMessage: sysex rejects a too-short message', () => {
 })
 
 test('encodeMidiMessage: unknown type throws', () => {
-  assert.throws(() => encodeMidiMessage('nonsense', {}))
+  // Deliberately invalid type — must reach the encoder and throw at runtime.
+  assert.throws(() => encodeMidiMessage('nonsense' as MidiMessageType, {} as MidiMessageData))
 })

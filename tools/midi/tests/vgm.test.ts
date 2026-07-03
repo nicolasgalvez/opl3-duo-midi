@@ -1,6 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseVgmHeader, resolveChip, parseVgmCommands, parseVgm, toFlatEvents } from '../src/core/vgm.ts'
+import {
+  parseVgmHeader,
+  resolveChip,
+  parseVgmCommands,
+  parseVgm,
+  toFlatEvents,
+  type ParsedVgm,
+} from '../src/core/vgm.ts'
 import { rawWriteSysEx, bankForPort } from '../src/core/oplRaw.ts'
 
 const SAMPLE_RATE = 44100
@@ -8,13 +15,27 @@ const SAMPLE_RATE = 44100
 // Hand-built minimal VGM buffers — no real VGMRips file is needed for unit tests.
 // Layout: https://vgmrips.net/wiki/VGM_Specification
 
-function u32(buf, off, value) {
+function u32(buf: Buffer, off: number, value: number) {
   buf.writeUInt32LE(value >>> 0, off)
+}
+
+interface BuildVgmOptions {
+  totalSamples?: number
+  loopOffsetAbs?: number
+  ym3812Clock?: number
+  ymf262Clock?: number
+  commands?: number[]
 }
 
 // Builds a v1.51-style header (data offset + OPL clock fields both present,
 // data starts immediately after the header) followed by a raw command stream.
-function buildVgm({ totalSamples = 0, loopOffsetAbs = 0, ym3812Clock = 0, ymf262Clock = 0, commands = [] } = {}) {
+function buildVgm({
+  totalSamples = 0,
+  loopOffsetAbs = 0,
+  ym3812Clock = 0,
+  ymf262Clock = 0,
+  commands = [],
+}: BuildVgmOptions = {}) {
   const header = Buffer.alloc(0x60)
   header.write('Vgm ', 0, 'ascii')
   u32(header, 0x08, 0x151)
@@ -26,16 +47,16 @@ function buildVgm({ totalSamples = 0, loopOffsetAbs = 0, ym3812Clock = 0, ymf262
   return Buffer.concat([header, Buffer.from(commands)])
 }
 
-function write5A(reg, val) {
+function write5A(reg: number, val: number) {
   return [0x5a, reg, val]
 }
-function write5E(reg, val) {
+function write5E(reg: number, val: number) {
   return [0x5e, reg, val]
 }
-function write5F(reg, val) {
+function write5F(reg: number, val: number) {
   return [0x5f, reg, val]
 }
-function wait16(n) {
+function wait16(n: number) {
   return [0x61, n & 0xff, (n >> 8) & 0xff]
 }
 function end() {
@@ -187,13 +208,14 @@ test('parseVgm: fails fast on a non-OPL file before ever touching the command st
 })
 
 test('toFlatEvents: maps writes to raw SysEx events using the shared oplRaw encoder, keeping port/reg/value for the visualizer', () => {
+  // Deliberately chip-less: toFlatEvents only reads writes/duration.
   const vgm = {
     duration: 1,
     writes: [
       { t: 0, port: 0, reg: 0xb0, value: 0x20 },
       { t: 0.5, port: 1, reg: 0x01, value: 0x02 },
     ],
-  }
+  } as ParsedVgm
   assert.deepEqual(toFlatEvents(vgm), [
     { t: 0, k: 'raw', port: 0, reg: 0xb0, value: 0x20, bytes: rawWriteSysEx(bankForPort(0), 0xb0, 0x20) },
     { t: 0.5, k: 'raw', port: 1, reg: 0x01, value: 0x02, bytes: rawWriteSysEx(bankForPort(1), 0x01, 0x02) },

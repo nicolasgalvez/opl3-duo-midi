@@ -29,9 +29,9 @@ try {
 }
 
 // --- parse args ---
-function arg(name, fallback) {
+function arg(name: string, fallback: string | null): string | null {
   const i = process.argv.indexOf(`--${name}`)
-  return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback
+  return i !== -1 && process.argv[i + 1] ? process.argv[i + 1]! : fallback
 }
 
 /** Auto-detect an audio input device via ffmpeg device listing (macOS: AVFoundation). */
@@ -39,14 +39,14 @@ function detectAudioDevice() {
   try {
     const out = execSync('ffmpeg -f avfoundation -list_devices true -i "" 2>&1', { encoding: 'utf8', timeout: 5000 })
     // Parse lines like: [AVFoundation indev @ 0x...] [2] BlackHole 2ch
-    const devices = []
+    const devices: string[] = []
     let inAudio = false
     for (const line of out.split('\n')) {
       if (line.includes('audio devices')) inAudio = true
       else if (line.includes('video devices')) inAudio = false
       else if (inAudio) {
         const m = line.match(/\[\d+\]\s*(.+)/)
-        if (m) devices.push(m[1].trim())
+        if (m) devices.push(m[1]!.trim())
       }
     }
     // Prefer BlackHole, else first device
@@ -70,7 +70,7 @@ const REC_DUR = NOTE_DUR + TAIL + 0.5
 let passed = 0
 let failed = 0
 
-function check(condition, label) {
+function check(condition: boolean, label: string): void {
   if (condition) {
     console.log(`  PASS: ${label}`)
     passed++
@@ -80,7 +80,7 @@ function check(condition, label) {
   }
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
 // --- run ---
 async function main() {
@@ -200,8 +200,13 @@ async function main() {
   process.exit(failed > 0 ? 1 : 0)
 }
 
+interface VolumeStats {
+  mean: number
+  max: number
+}
+
 /** Run ffmpeg volumedetect and parse the result. */
-function analyze(wavPath) {
+function analyze(wavPath: string): Promise<VolumeStats> {
   return new Promise((resolve) => {
     const p = spawn('ffmpeg', ['-i', wavPath, '-af', 'volumedetect', '-f', 'null', '-'], {
       stdio: ['ignore', 'pipe', 'pipe'],
