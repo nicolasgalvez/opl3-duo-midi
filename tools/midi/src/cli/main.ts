@@ -87,7 +87,8 @@ yargs(hideBin(process.argv))
         .positional('note', { type: 'number', describe: 'MIDI note (60 = middle C)' })
         .option('vel', { type: 'number', default: 100 })
         .option('dur', { type: 'number', default: 0.5, describe: 'seconds' })
-        .option('ch', { type: 'number', default: 1, describe: 'MIDI channel 1-16' }),
+        .option('ch', { type: 'number', default: 1, describe: 'MIDI channel 1-16' })
+        .option('pc', { type: 'number', describe: 'GM program 0-127 to select first (prints the patch name)' }),
     (argv) => cmdNote(argv as unknown as NoteArgv),
   )
   .command(
@@ -98,7 +99,8 @@ yargs(hideBin(process.argv))
         .positional('notes', { type: 'number' })
         .option('vel', { type: 'number', default: 100 })
         .option('dur', { type: 'number', default: 1 })
-        .option('ch', { type: 'number', default: 1 }),
+        .option('ch', { type: 'number', default: 1 })
+        .option('pc', { type: 'number', describe: 'GM program 0-127 to select first (prints the patch name)' }),
     (argv) => cmdChord(argv as unknown as ChordArgv),
   )
   .command(
@@ -109,7 +111,8 @@ yargs(hideBin(process.argv))
         .option('root', { type: 'number', default: 60 })
         .option('vel', { type: 'number', default: 100 })
         .option('dur', { type: 'number', default: 0.25 })
-        .option('ch', { type: 'number', default: 1 }),
+        .option('ch', { type: 'number', default: 1 })
+        .option('pc', { type: 'number', describe: 'GM program 0-127 to select first (prints the patch name)' }),
     (argv) => cmdScale(argv as unknown as ScaleArgv),
   )
   .command(
