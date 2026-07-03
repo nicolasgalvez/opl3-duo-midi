@@ -974,6 +974,7 @@ class Engine {
       if (this.out) sendRaw(this.out, ev)
       if (ev.k === 'on' || ev.k === 'off' || ev.k === 'cc')
         this.broadcast({ type: 'ev', k: ev.k, c: ev.c, a: ev.a, b: ev.b })
+      else if (ev.k === 'raw') this.broadcast({ type: 'ev', k: ev.k, port: ev.port, reg: ev.reg, value: ev.value })
     }
     if (now - this.lastPos > 100) {
       this.lastPos = now
