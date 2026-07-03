@@ -186,7 +186,7 @@ test('parseVgm: fails fast on a non-OPL file before ever touching the command st
   assert.throws(() => parseVgm(buf), /YM3812|YMF262|OPL/)
 })
 
-test('toFlatEvents: maps writes to raw SysEx events using the shared oplRaw encoder', () => {
+test('toFlatEvents: maps writes to raw SysEx events using the shared oplRaw encoder, keeping port/reg/value for the visualizer', () => {
   const vgm = {
     duration: 1,
     writes: [
@@ -195,7 +195,7 @@ test('toFlatEvents: maps writes to raw SysEx events using the shared oplRaw enco
     ],
   }
   assert.deepEqual(toFlatEvents(vgm), [
-    { t: 0, k: 'raw', bytes: rawWriteSysEx(bankForPort(0), 0xb0, 0x20) },
-    { t: 0.5, k: 'raw', bytes: rawWriteSysEx(bankForPort(1), 0x01, 0x02) },
+    { t: 0, k: 'raw', port: 0, reg: 0xb0, value: 0x20, bytes: rawWriteSysEx(bankForPort(0), 0xb0, 0x20) },
+    { t: 0.5, k: 'raw', port: 1, reg: 0x01, value: 0x02, bytes: rawWriteSysEx(bankForPort(1), 0x01, 0x02) },
   ])
 })

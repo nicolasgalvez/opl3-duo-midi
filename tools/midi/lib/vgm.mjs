@@ -125,11 +125,16 @@ const BARE_CHIP_INIT_WRITES = [
   { t: 0, port: 1, reg: 0x05, value: 0x00 }, // disable OPL3 mode
 ]
 
-/** Adapt parsed VGM writes into the flat {t,k,...} event shape the Engine/serve path uses. */
+/** Adapt parsed VGM writes into the flat {t,k,...} event shape the Engine/serve path uses.
+ *  port/reg/value are kept alongside the encoded bytes so the browser visualizer can derive
+ *  key-on/off activity per OPL channel without decoding the SysEx payload itself. */
 export function toFlatEvents(vgm) {
   return vgm.writes.map(({ t, port, reg, value }) => ({
     t,
     k: 'raw',
+    port,
+    reg,
+    value,
     bytes: rawWriteSysEx(bankForPort(port), reg, value),
   }))
 }
