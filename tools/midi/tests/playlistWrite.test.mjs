@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { toM3U, toJSPF } from '../lib/playlistWrite.mjs'
+import { toM3U, toJSPF } from '../src/core/playlistWrite.ts'
 import { parseM3U, parseJSPF } from '../lib/playlist.mjs'
 
 test('toM3U emits an #EXTM3U header and one path per line, in order', () => {

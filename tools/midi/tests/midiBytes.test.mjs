@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { encodeMidiMessage } from '../lib/net/midiBytes.mjs'
+import { encodeMidiMessage } from '../src/core/midiBytes.ts'
 
 test('encodeMidiMessage: noteon', () => {
   assert.deepEqual(encodeMidiMessage('noteon', { note: 60, velocity: 100, channel: 0 }), [0x90, 60, 100])

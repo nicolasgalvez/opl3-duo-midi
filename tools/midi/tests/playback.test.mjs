@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { nextPlaylistIndex, prevPlaylistIndex, shuffleOrder } from '../lib/playback.mjs'
+import { nextPlaylistIndex, prevPlaylistIndex, shuffleOrder } from '../src/core/playback.ts'
 
 test('nextPlaylistIndex sequential stops at end without repeat', () => {
   assert.equal(nextPlaylistIndex({ index: 0, length: 3, repeat: false, shuffle: false }), 1)

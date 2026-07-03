@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { resolveDimensions } from '../lib/presets.mjs'
+import { resolveDimensions } from '../src/core/presets.ts'
 
 test('resolveDimensions legacy ratio 16:9', () => {
   assert.deepEqual(resolveDimensions({ ratio: '16:9' }, {}), { w: 1280, h: 720 })

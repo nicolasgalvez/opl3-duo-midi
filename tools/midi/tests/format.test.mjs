@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { detectFormat } from '../lib/format.mjs'
+import { detectFormat } from '../src/core/format.ts'
 
 test('detectFormat: MThd magic is midi', () => {
   assert.equal(detectFormat(Buffer.from('MThd0000', 'ascii')), 'midi')

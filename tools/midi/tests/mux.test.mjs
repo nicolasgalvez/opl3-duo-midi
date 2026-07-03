@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { resolveAvOffset, buildMuxArgs } from '../lib/mux.mjs'
+import { resolveAvOffset, buildMuxArgs } from '../src/core/mux.ts'
 
 test('resolveAvOffset defaults to 0', () => {
   assert.equal(resolveAvOffset({}, {}), 0)

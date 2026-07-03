@@ -1,4 +1,4 @@
-import { rawWriteSysEx, bankForPort } from './oplRaw.mjs'
+import { rawWriteSysEx, bankForPort } from './oplRaw.ts'
 
 // VGM (native OPL2/OPL3 register-log) parsing. Spec: https://vgmrips.net/wiki/VGM_Specification
 // Only the OPL family is supported (YM3812/OPL2, YMF262/OPL3) — everything
@@ -13,18 +13,49 @@ const OFF = {
   DATA_OFFSET: 0x34,
   YM3812_CLOCK: 0x50,
   YMF262_CLOCK: 0x5c,
+} as const
+
+export interface VgmHeader {
+  version: number
+  dataOffset: number
+  loopOffset: number
+  totalSamples: number
+  ym3812Clock: number
+  ymf262Clock: number
 }
 
-function readU32LE(buf, off) {
+export type OplChip = 'ym3812' | 'ymf262'
+
+/** One time-resolved OPL register write. `t` is seconds from song start. */
+export interface VgmWrite {
+  t: number
+  port: number
+  reg: number
+  value: number
+}
+
+export interface ParsedVgm {
+  chip: OplChip
+  writes: VgmWrite[]
+  duration: number
+}
+
+/** The flat {t,k,...} event shape the Engine/serve path uses. */
+export interface RawFlatEvent extends VgmWrite {
+  k: 'raw'
+  bytes: number[]
+}
+
+function readU32LE(buf: Buffer, off: number): number {
   return off + 4 <= buf.length ? buf.readUInt32LE(off) : 0
 }
 
-export function isVgm(buf) {
+export function isVgm(buf: Buffer): boolean {
   return buf.length >= 4 && buf.toString('ascii', 0, 4) === 'Vgm '
 }
 
 /** Parse the fixed VGM header into the fields we need. */
-export function parseVgmHeader(buf) {
+export function parseVgmHeader(buf: Buffer): VgmHeader {
   if (!isVgm(buf)) throw new Error('Not a VGM file (missing "Vgm " magic)')
 
   const version = readU32LE(buf, OFF.VERSION)
@@ -42,7 +73,7 @@ export function parseVgmHeader(buf) {
 }
 
 /** Resolve the OPL chip this VGM targets, or throw a clear error if it isn't one. */
-export function resolveChip(header) {
+export function resolveChip(header: VgmHeader): { chip: OplChip; clock: number } {
   if (header.ymf262Clock) return { chip: 'ymf262', clock: header.ymf262Clock }
   if (header.ym3812Clock) return { chip: 'ym3812', clock: header.ym3812Clock }
   throw new Error(
@@ -52,26 +83,27 @@ export function resolveChip(header) {
 }
 
 /** Walk the VGM command stream into a flat, time-resolved list of register writes. */
-export function parseVgmCommands(buf, header) {
-  const writes = []
+export function parseVgmCommands(buf: Buffer, header: VgmHeader): { writes: VgmWrite[]; duration: number } {
+  const writes: VgmWrite[] = []
   let offset = header.dataOffset
   let samples = 0
 
-  const pushWrite = (port, reg, value) => writes.push({ t: samples / SAMPLE_RATE, port, reg, value })
+  const pushWrite = (port: number, reg: number, value: number) =>
+    writes.push({ t: samples / SAMPLE_RATE, port, reg, value })
 
   while (offset < buf.length) {
-    const cmd = buf[offset++]
+    const cmd = buf[offset++]!
     switch (cmd) {
       case 0x5a: // YM3812 (OPL2) register write
-        pushWrite(0, buf[offset], buf[offset + 1])
+        pushWrite(0, buf[offset]!, buf[offset + 1]!)
         offset += 2
         break
       case 0x5e: // YMF262 (OPL3) port 0 register write
-        pushWrite(0, buf[offset], buf[offset + 1])
+        pushWrite(0, buf[offset]!, buf[offset + 1]!)
         offset += 2
         break
       case 0x5f: // YMF262 (OPL3) port 1 register write
-        pushWrite(1, buf[offset], buf[offset + 1])
+        pushWrite(1, buf[offset]!, buf[offset + 1]!)
         offset += 2
         break
       case 0x61: // wait n samples (16-bit LE)
@@ -103,7 +135,7 @@ export function parseVgmCommands(buf, header) {
 }
 
 /** Parse a VGM file buffer end to end. Throws early for non-OPL chips. */
-export function parseVgm(buf) {
+export function parseVgm(buf: Buffer): ParsedVgm {
   const header = parseVgmHeader(buf)
   const { chip } = resolveChip(header) // throws before touching the (possibly unsupported) command stream
   const { writes, duration } = parseVgmCommands(buf, header)
@@ -120,7 +152,7 @@ export function parseVgm(buf) {
 // writes were sent first). Both registers live on register port 1 (0x104/0x105
 // in chip terms), matching how a real OPL3 VGM enables OPL3 mode itself via a
 // 0x5F write to reg 0x05.
-const BARE_CHIP_INIT_WRITES = [
+const BARE_CHIP_INIT_WRITES: VgmWrite[] = [
   { t: 0, port: 1, reg: 0x04, value: 0x00 }, // disable all 4-op channel pairs
   { t: 0, port: 1, reg: 0x05, value: 0x00 }, // disable OPL3 mode
 ]
@@ -128,10 +160,10 @@ const BARE_CHIP_INIT_WRITES = [
 /** Adapt parsed VGM writes into the flat {t,k,...} event shape the Engine/serve path uses.
  *  port/reg/value are kept alongside the encoded bytes so the browser visualizer can derive
  *  key-on/off activity per OPL channel without decoding the SysEx payload itself. */
-export function toFlatEvents(vgm) {
+export function toFlatEvents(vgm: ParsedVgm): RawFlatEvent[] {
   return vgm.writes.map(({ t, port, reg, value }) => ({
     t,
-    k: 'raw',
+    k: 'raw' as const,
     port,
     reg,
     value,

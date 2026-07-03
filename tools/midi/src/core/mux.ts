@@ -1,13 +1,24 @@
 /** Milliseconds to shift A/V sync at mux time (+ delays audio, − delays video). */
-export function resolveAvOffset(argv = {}, env = process.env) {
+export function resolveAvOffset(
+  argv: { avOffset?: number | string | null } = {},
+  env: NodeJS.ProcessEnv = process.env,
+): number {
   if (argv.avOffset != null && argv.avOffset !== '') return Number(argv.avOffset) || 0
   if (env.OPL_AV_OFFSET != null && env.OPL_AV_OFFSET !== '') return Number(env.OPL_AV_OFFSET) || 0
   return 0
 }
 
+export interface MuxOptions {
+  videoFile: string
+  audioFile: string
+  outPath: string
+  fps: number
+  avOffsetMs?: number
+}
+
 /** Build ffmpeg args to mux video + audio with optional sync offset. */
-export function buildMuxArgs({ videoFile, audioFile, outPath, fps, avOffsetMs = 0 }) {
-  const args = []
+export function buildMuxArgs({ videoFile, audioFile, outPath, fps, avOffsetMs = 0 }: MuxOptions): string[] {
+  const args: string[] = []
   const offsetSec = (Math.abs(avOffsetMs) / 1000).toFixed(3)
 
   if (avOffsetMs < 0) {
