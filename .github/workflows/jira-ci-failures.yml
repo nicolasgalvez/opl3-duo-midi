@@ -1,0 +1,19 @@
+name: CI Failures → Jira
+
+on:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+
+jobs:
+  file-ticket:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: procyon-creative/jira-action-man@v2
+        with:
+          create_issue_on_failure: true
+          issue_project: 'ODM'
+          issue_type: 'Bug'
+          jira_base_url: ${{ secrets.JIRA_BASE_URL }}
+          jira_email: ${{ secrets.JIRA_EMAIL }}
+          jira_api_token: ${{ secrets.JIRA_API_TOKEN }}
