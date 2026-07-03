@@ -21,6 +21,9 @@ board's stereo line-out.
   [mt32-pi](https://github.com/dwhinham/mt32-pi)) instead of USB, from every `opl` command
 - An isolated **mt32-pi module** (`opl mt32 …`) for that device's custom SysEx controls
   (ROM set / synth mode / SoundFont / reversed stereo) and FTP SoundFont management
+- **VGM playback** — plays native OPL2/OPL3 register-log files (`.vgm`) alongside MIDI,
+  auto-detected by content; a small raw-register-write SysEx command bypasses GM voice
+  allocation entirely for 1:1 authentic FM playback
 
 ## Hardware / wiring
 
@@ -63,6 +66,7 @@ opl note 60                                # middle C
 opl pc 24                                  # program change (GM patch)
 opl cc 10 0                                # any control change (here: pan left)
 opl play song.mid                          # play a Standard MIDI File
+opl play song.vgm                          # or a native OPL2/OPL3 register-log VGM (below)
 opl play "/path/to/folder" -r --loop       # play a folder; n/p/space/q to control
 opl serve "<folder>" -r                    # web visualizer (below)
 opl serve "<folder>" -r --layout minimized # hide playlist, large scrolling title
@@ -139,6 +143,34 @@ opl render album.jspf -o out.mp4 # render a playlist to video (album mode also w
 Track paths inside a playlist resolve **relative to the playlist file's own folder** first, then
 fall back to `MIDI_LIBRARY` (below). Entries that can't be found are skipped with a warning rather
 than aborting the playlist.
+
+### VGM playback
+
+`opl play`, `opl serve`, and `opl render` also play **VGM** files — native OPL2/OPL3
+register-log captures, e.g. AdLib-native DOS game rips from [VGMRips](https://vgmrips.net) —
+transparently alongside MIDI, with **no new flags**. The format is auto-detected from the
+file's magic bytes before playback starts, never by extension (a VGM renamed to `.mid` still
+routes correctly), so the same commands, folders, playlists, and OBS/render pipeline work for
+both:
+
+```bash
+opl play song.vgm                  # same as a .mid — auto-detected by content
+opl play "/path/to/folder" -r      # folders/playlists pick up .vgm alongside .mid
+opl render song.vgm --obs ...      # renders exactly like a MIDI track
+```
+
+Unlike MIDI playback (which maps notes onto GM FM patches), a VGM file is the actual OPL
+register stream captured from real hardware or emulation, so replaying it is a 1:1,
+maximally authentic FM performance — no patch mapping, no MT-32→GM conversion. Only the OPL
+family is supported (**YM3812/OPL2** and **YMF262/OPL3** — other Yamaha FM chips, PSGs, etc.
+are out of scope); a VGM targeting a different chip fails with a clear error instead of
+emitting noise. `.vgz` (gzip-compressed VGM) isn't auto-decompressed yet — `gunzip` it to
+`.vgm` first.
+
+Raw register writes bypass General MIDI voice allocation entirely, over a small custom SysEx
+command (`F0 7D 7F <bank> <reg> <value> F7`) the firmware decodes directly into
+`OPL3Duo::write()`. Every track — VGM or MIDI — resets the chip to a clean baseline before it
+starts, so playback is self-healing even if a previous session left the chip mid-VGM.
 
 ### Web player + visualizer
 
@@ -379,6 +411,9 @@ src/
   GMNames.h           General MIDI instrument names
   main.cpp            composition root + usbMIDI handlers
 tools/midi/           the `opl` CLI (Node + yargs + easymidi + @tonejs/midi)
+  lib/format.mjs      shared file-format detection (MIDI vs VGM, by magic bytes)
+  lib/vgm.mjs         VGM (OPL2/OPL3 register-log) parsing
+  lib/oplRaw.mjs      raw OPL register-write SysEx protocol
   lib/net/            network MIDI (UDP transport) + the isolated mt32-pi module (SysEx, FTP)
 ```
 
