@@ -44,6 +44,25 @@ static void onSystemReset() {
   display.show(patchEncoder.value(), gmInstrumentName(patchEncoder.value()));
 }
 
+// Raw OPL register-write SysEx (ODM-15: VGM playback streams a file's actual
+// register log 1:1, bypassing GM voice allocation entirely):
+//   F0 7D 7F <bank> <regHiNibble> <regLoNibble> <valHiNibble> <valLoNibble> F7
+// 0x7D is MIDI's non-commercial/educational manufacturer ID — also used by the
+// unrelated mt32-pi device-control protocol (tools/midi/lib/net/mt32pi.mjs);
+// different target device, disambiguated here by the 0x7F sub-command byte.
+// reg/value are nibble-split into 7-bit-safe SysEx data bytes.
+constexpr uint8_t SYSEX_MANUFACTURER_ID = 0x7D;
+constexpr uint8_t SYSEX_RAW_WRITE = 0x7F;
+static void onSysEx(uint8_t* data, unsigned int size) {
+  if (size != 9 || data[0] != 0xF0 || data[8] != 0xF7) return;
+  if (data[1] != SYSEX_MANUFACTURER_ID || data[2] != SYSEX_RAW_WRITE) return;
+
+  uint8_t bank = data[3];
+  uint8_t reg = (data[4] << 4) | data[5];
+  uint8_t value = (data[6] << 4) | data[7];
+  synth.rawWrite(bank, reg, value);
+}
+
 void setup() {
   usbMIDI.setHandleNoteOn(onNoteOn);
   usbMIDI.setHandleNoteOff(onNoteOff);
@@ -52,6 +71,7 @@ void setup() {
   usbMIDI.setHandlePitchChange(onPitchChange);
   usbMIDI.setHandleAfterTouch(onAfterTouch);
   usbMIDI.setHandleSystemReset(onSystemReset);
+  usbMIDI.setHandleSystemExclusive(onSysEx);
 
   synth.begin();
   patchEncoder.begin();
