@@ -1,5 +1,6 @@
 import { GM_NAMES } from '../../core/gm.ts'
 import { midiOutputs } from '../../adapters/midi/outputs.ts'
+import type { MidiOutput } from '../../ports/midiOutput.ts'
 import { openOutput, allNotesOff, sleep, type GlobalArgv } from '../shared.ts'
 import { requireMidiByte, requireChannel, requireDuration } from '../args.ts'
 
@@ -8,6 +9,7 @@ export interface NoteArgv extends GlobalArgv {
   vel: number
   dur: number
   ch: number
+  pc?: number
 }
 
 export interface ChordArgv extends GlobalArgv {
@@ -15,6 +17,7 @@ export interface ChordArgv extends GlobalArgv {
   vel: number
   dur: number
   ch: number
+  pc?: number
 }
 
 export interface ScaleArgv extends GlobalArgv {
@@ -22,6 +25,7 @@ export interface ScaleArgv extends GlobalArgv {
   vel: number
   dur: number
   ch: number
+  pc?: number
 }
 
 export interface PcArgv extends GlobalArgv {
@@ -36,6 +40,18 @@ export interface CcArgv extends GlobalArgv {
 }
 
 const NOTE_HINT = 'a MIDI note number 0-127 (60 = middle C)'
+const PROGRAM_HINT = 'a GM program 0-127'
+
+/** Resolve an optional --pc flag; when set, the caller sends it before its notes. */
+function optionalProgram(pc: number | undefined): number | undefined {
+  return pc === undefined ? undefined : requireMidiByte('program', pc, PROGRAM_HINT)
+}
+
+function sendProgram(out: MidiOutput, program: number | undefined, channel: number): string {
+  if (program === undefined) return ''
+  out.send('program', { number: program, channel })
+  return `  [pc ${program} ${GM_NAMES[program] ?? '?'}]`
+}
 
 export function cmdList(): void {
   console.log('MIDI outputs:')
@@ -47,10 +63,12 @@ export async function cmdNote(argv: NoteArgv): Promise<void> {
   const vel = requireMidiByte('velocity', argv.vel)
   const dur = requireDuration(argv.dur)
   const chArg = requireChannel(argv.ch)
+  const program = optionalProgram(argv.pc)
   const { out, name } = openOutput(argv)
   const ch = chArg - 1
+  const pcLabel = sendProgram(out, program, ch)
   out.send('noteon', { note, velocity: vel, channel: ch })
-  console.log(`${name}: note ${note} ch${chArg} vel${vel} for ${dur}s`)
+  console.log(`${name}: note ${note} ch${chArg} vel${vel} for ${dur}s${pcLabel}`)
   await sleep(dur * 1000)
   out.send('noteoff', { note, velocity: 0, channel: ch })
   out.close()
@@ -61,10 +79,12 @@ export async function cmdChord(argv: ChordArgv): Promise<void> {
   const vel = requireMidiByte('velocity', argv.vel)
   const dur = requireDuration(argv.dur)
   const chArg = requireChannel(argv.ch)
+  const program = optionalProgram(argv.pc)
   const { out, name } = openOutput(argv)
   const ch = chArg - 1
+  const pcLabel = sendProgram(out, program, ch)
   for (const n of notes) out.send('noteon', { note: n, velocity: vel, channel: ch })
-  console.log(`${name}: chord ${notes.join(' ')} ch${chArg} for ${dur}s`)
+  console.log(`${name}: chord ${notes.join(' ')} ch${chArg} for ${dur}s${pcLabel}`)
   await sleep(dur * 1000)
   for (const n of notes) out.send('noteoff', { note: n, velocity: 0, channel: ch })
   out.close()
@@ -75,10 +95,12 @@ export async function cmdScale(argv: ScaleArgv): Promise<void> {
   const vel = requireMidiByte('velocity', argv.vel)
   const dur = requireDuration(argv.dur)
   const chArg = requireChannel(argv.ch)
+  const program = optionalProgram(argv.pc)
   const { out, name } = openOutput(argv)
   const ch = chArg - 1
+  const pcLabel = sendProgram(out, program, ch)
   const scale = [0, 2, 4, 5, 7, 9, 11, 12].map((s) => root + s)
-  console.log(`${name}: scale from ${root} ch${chArg}`)
+  console.log(`${name}: scale from ${root} ch${chArg}${pcLabel}`)
   for (const n of scale) {
     out.send('noteon', { note: n, velocity: vel, channel: ch })
     await sleep(dur * 1000)
