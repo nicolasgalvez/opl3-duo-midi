@@ -129,8 +129,9 @@ export function cmdCc(argv: CcArgv): void {
   out.close()
 }
 
-export function cmdPanic(argv: GlobalArgv): void {
+export async function cmdPanic(argv: GlobalArgv): Promise<void> {
   const { out, name } = openOutput(argv)
+  await out.ready?.() // 48-message burst below would overflow a cold ARP hold queue
   allNotesOff(out)
   console.log(`${name}: panic — all sound/notes off`)
   out.close()

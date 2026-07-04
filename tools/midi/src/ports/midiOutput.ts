@@ -13,4 +13,8 @@ export interface MidiOutput {
 export interface ClosableMidiOutput extends MidiOutput {
   readonly name: string
   close(): void
+  /** Transport warm-up, if the transport needs one (UDP: lets the OS resolve
+   *  ARP, which only holds 16 packets, before a burst). Await before blasting
+   *  more than a handful of messages at once. */
+  ready?(): Promise<void>
 }

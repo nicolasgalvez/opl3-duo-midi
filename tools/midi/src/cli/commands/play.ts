@@ -50,7 +50,12 @@ function makeKeys(): PlayKeys | null {
 type PlayAction = 'next' | 'prev' | 'quit' | 'done'
 
 // Returns 'next' | 'prev' | 'quit' | 'done'.
-function playOne(out: ClosableMidiOutput, path: string, forceCh: number | undefined, keys: PlayKeys | null): Promise<PlayAction> {
+function playOne(
+  out: ClosableMidiOutput,
+  path: string,
+  forceCh: number | undefined,
+  keys: PlayKeys | null,
+): Promise<PlayAction> {
   resetToBaseline(out) // clean chip state before this track, regardless of what the previous one left behind
   let info: TimedActionList
   try {
@@ -117,6 +122,7 @@ export async function cmdPlay(argv: PlayArgv): Promise<void> {
   if (argv.shuffle) files.sort(() => Math.random() - 0.5)
 
   const { out, name } = openOutput(argv)
+  await out.ready?.() // let UDP resolve ARP before the t=0 program-change burst
   const keys = makeKeys()
   console.log(
     `${name}: ${files.length} track(s).` +
