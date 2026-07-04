@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import dgram from 'node:dgram'
-import { UdpMidiOutput } from '../src/adapters/net/udpMidiOutput.ts'
+import { UdpMidiOutput, WARMUP_MIDI_BYTES } from '../src/adapters/net/udpMidiOutput.ts'
 import { DEFAULT_MIDI_UDP_PORT } from '../src/contracts/net.ts'
 
 function withUdpServer(fn: (server: dgram.Socket, port: number) => Promise<void>): Promise<void> {
@@ -20,6 +20,62 @@ function withUdpServer(fn: (server: dgram.Socket, port: number) => Promise<void>
   })
 }
 
+const isWarmup = (m: Buffer) =>
+  m.length === WARMUP_MIDI_BYTES.length && [...m].every((b, i) => b === WARMUP_MIDI_BYTES[i])
+
+/** First non-warm-up datagram (skips the wake/ARP warm-up sent on open). */
+function onceMidiData(server: dgram.Socket): Promise<Buffer> {
+  return new Promise<Buffer>((resolve) => {
+    const onMessage = (m: Buffer) => {
+      if (isWarmup(m)) return
+      server.off('message', onMessage)
+      resolve(m)
+    }
+    server.on('message', onMessage)
+  })
+}
+
+// macOS holds only net.link.ether.inet.maxhold (16) packets per destination
+// while ARP resolves and silently drops the rest, and mt32-pi's power-saving
+// mode throttles its CPU until the first MIDI message wakes it — either way a
+// cold first `opl play` used to lose most of its t=0 program-change burst.
+// The warm-up datagram (a no-op noteoff) starts ARP resolution and wakes the
+// device at open time, before any real traffic.
+test('UdpMidiOutput sends a no-op noteoff warm-up datagram on open, before any send()', async () => {
+  await withUdpServer(async (server, port) => {
+    const received = new Promise<Buffer>((resolve) => server.once('message', resolve))
+    const out = new UdpMidiOutput('127.0.0.1', port)
+    const msg = await received
+    assert.deepEqual([...msg], WARMUP_MIDI_BYTES)
+    out.close()
+  })
+})
+
+test('UdpMidiOutput.ready resolves after the warm-up grace period', async () => {
+  await withUdpServer(async (server, port) => {
+    const out = new UdpMidiOutput('127.0.0.1', port, { warmupMs: 20 })
+    const t0 = performance.now()
+    await out.ready()
+    assert.ok(performance.now() - t0 >= 19, 'ready() resolved before the grace period elapsed')
+    await out.ready() // second await resolves without another grace period
+    out.close()
+  })
+})
+
+test('UdpMidiOutput.ready keeps warm-up traffic ahead of the first real send', async () => {
+  await withUdpServer(async (server, port) => {
+    const received: Buffer[] = []
+    server.on('message', (m) => received.push(m))
+    const out = new UdpMidiOutput('127.0.0.1', port, { warmupMs: 20 })
+    await out.ready()
+    out.send('program', { number: 51, channel: 0 })
+    await new Promise((r) => setTimeout(r, 100))
+    assert.ok(isWarmup(received[0]!), 'warm-up datagram should arrive first')
+    assert.deepEqual([...received[1]!], [0xc0, 51])
+    out.close()
+  })
+})
+
 test('UdpMidiOutput defaults to port 1999', () => {
   const out = new UdpMidiOutput('192.168.1.121')
   assert.equal(out.port, 1999)
@@ -35,7 +91,7 @@ test('UdpMidiOutput.name identifies the network target', () => {
 
 test('UdpMidiOutput.send delivers raw MIDI bytes over UDP to host:port', async () => {
   await withUdpServer(async (server, port) => {
-    const received = new Promise<Buffer>((resolve) => server.once('message', resolve))
+    const received = onceMidiData(server)
     const out = new UdpMidiOutput('127.0.0.1', port)
     out.send('noteon', { note: 60, velocity: 100, channel: 0 })
     const msg = await received
@@ -46,7 +102,7 @@ test('UdpMidiOutput.send delivers raw MIDI bytes over UDP to host:port', async (
 
 test('UdpMidiOutput.send can deliver a sysex message', async () => {
   await withUdpServer(async (server, port) => {
-    const received = new Promise<Buffer>((resolve) => server.once('message', resolve))
+    const received = onceMidiData(server)
     const out = new UdpMidiOutput('127.0.0.1', port)
     out.send('sysex', [0xf0, 0x7d, 0x00, 0xf7])
     const msg = await received
@@ -76,6 +132,7 @@ test('UdpMidiOutput.close flushes queued datagrams instead of dropping them', as
     const received: Buffer[] = []
     const allArrived = new Promise<void>((resolve) => {
       server.on('message', (m) => {
+        if (isWarmup(m)) return // ignore the wake/ARP warm-up datagram
         received.push(m)
         if (received.length === COUNT) resolve()
       })
