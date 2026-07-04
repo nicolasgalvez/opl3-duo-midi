@@ -25,7 +25,12 @@ async function captureWire(args: string[], expectCount: number): Promise<number[
         finish(new Error(`only ${datagrams.length}/${expectCount} datagrams arrived: ${JSON.stringify(datagrams)}`)),
       10_000,
     )
+    let first = true
     server.on('message', (buf) => {
+      if (first) {
+        first = false
+        return // the wake/ARP warm-up datagram (a no-op noteoff), not song MIDI
+      }
       datagrams.push([...buf])
       if (datagrams.length === expectCount) finish()
     })
