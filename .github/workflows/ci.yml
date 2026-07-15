@@ -4,6 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  # macOS render-e2e is manual-only: macOS runners bill at 10x on private
+  # repos and every PR (incl. Dependabot) was paying it. Linux covers the
+  # per-PR floor; run the macOS leg by hand before releases.
+  workflow_dispatch:
 
 jobs:
   test:
@@ -69,8 +73,11 @@ jobs:
             # RtAudio's Pulse backend exposes this fixed device name; the
             # default source is pointed at the null sink's monitor below.
             audio-device: 'PulseAudio'
-          - os: macos-latest
+          # macOS (10x billing) only when manually dispatched
+          - os: ${{ github.event_name == 'workflow_dispatch' && 'macos-latest' || 'SKIP' }}
             audio-device: 'BlackHole 2ch'
+        exclude:
+          - os: 'SKIP'
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
