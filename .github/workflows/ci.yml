@@ -4,10 +4,6 @@ on:
   pull_request:
   push:
     branches: [main]
-  # macOS render-e2e is manual-only: macOS runners bill at 10x on private
-  # repos and every PR (incl. Dependabot) was paying it. Linux covers the
-  # per-PR floor; run the macOS leg by hand before releases.
-  workflow_dispatch:
 
 jobs:
   test:
@@ -62,23 +58,14 @@ jobs:
   # Full `opl render` pipeline (ODM-13): fluidsynth + the TimGM6mb GM soundfont
   # stand in for the OPL3 Duo hardware, and a loopback audio device stands in
   # for the board's analog capture — so the real MIDI -> synth -> capture ->
-  # browser video -> mux chain runs on both Linux and macOS.
+  # browser video -> mux chain runs the same way it does in production (Linux).
+  # The former macOS leg was removed 2026-07-16 (ODM-24): no billing-safe way
+  # to run it (hosted = 10x billing, disabled; proski is Intel Big Sur, below
+  # the runner agent's macOS 13 floor). The real-hardware chain on proski is
+  # the actual macOS coverage.
   render-e2e:
-    name: render e2e (fluidsynth, ${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            # RtAudio's Pulse backend exposes this fixed device name; the
-            # default source is pointed at the null sink's monitor below.
-            audio-device: 'PulseAudio'
-          # macOS (10x billing) only when manually dispatched
-          - os: ${{ github.event_name == 'workflow_dispatch' && 'macos-latest' || 'SKIP' }}
-            audio-device: 'BlackHole 2ch'
-        exclude:
-          - os: 'SKIP'
-    runs-on: ${{ matrix.os }}
+    name: render e2e (fluidsynth)
+    runs-on: [self-hosted, linux]
     steps:
       - uses: actions/checkout@v7
 
@@ -92,7 +79,6 @@ jobs:
       # sink) and the MIDI transport (opl's own UDP adapter -> fluidsynth's
       # TCP shell, via tests/fluidUdpBridge.ts) avoid the kernel entirely.
       - name: Audio loopback + fluidsynth (Linux, Pulse null sink)
-        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libasound2-plugins libpulse0 pulseaudio pulseaudio-utils fluidsynth ffmpeg
@@ -102,17 +88,6 @@ jobs:
           pactl set-default-source oplsink.monitor
           echo "OPL_FLUID_AUDIO_DRIVER=pulseaudio" >> "$GITHUB_ENV"
           echo "OPL_FLUID_MIDI=udp" >> "$GITHUB_ENV"
-
-      - name: Audio loopback + fluidsynth (macOS, BlackHole)
-        if: runner.os == 'macOS'
-        run: |
-          brew install fluid-synth blackhole-2ch ffmpeg
-          # BlackHole is a CoreAudio HAL plugin; coreaudiod must reload to see
-          # it. fluidsynth then plays straight into it (audio.coreaudio.device)
-          # — the system default output never changes.
-          sudo killall coreaudiod || true
-          sleep 3
-          echo "OPL_FLUID_AUDIO_DEVICE=BlackHole 2ch" >> "$GITHUB_ENV"
 
       - name: Install root + CLI deps
         run: npm ci
@@ -125,5 +100,5 @@ jobs:
         working-directory: tools/midi
         env:
           OPL_RENDER_E2E: '1'
-          OPL_AUDIO_DEVICE: ${{ matrix.audio-device }}
+          OPL_AUDIO_DEVICE: 'PulseAudio'
         run: npm run test:e2e:render
