@@ -1,6 +1,6 @@
 {
   "name": "opl3-duo-midi-tooling",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Repo-wide dev tooling (format + lint pre-commit hooks) for the OPL3 Duo MIDI project. The firmware is C++ (PlatformIO); the companion CLI is in tools/midi.",
   "type": "module",
