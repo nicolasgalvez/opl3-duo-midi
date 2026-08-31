@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
@@ -65,7 +65,7 @@ jobs:
   # the actual macOS coverage.
   render-e2e:
     name: render e2e (fluidsynth)
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
