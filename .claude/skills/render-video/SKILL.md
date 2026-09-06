@@ -18,7 +18,7 @@ the web visualizer, and muxes audio+video. Output is H.264, ready for upload.
 ## Prerequisites (check these first)
 
 - **ffmpeg** installed (`ffmpeg -version`). Required for capture + mux.
-- **Playwright** browser available — `npm install` in `tools/midi/` if a render fails to launch
+- **Playwright** browser available — `npm install` in `render-tools: ` if a render fails to launch
   Chromium. (Not needed when using `--obs`.)
 - **Audio routing**: the OPL3 board emits analog audio from its line-out jack. To record it you
   must route line-out into an input the computer can capture — a loopback device (BlackHole on
@@ -29,9 +29,9 @@ the web visualizer, and muxes audio+video. Output is H.264, ready for upload.
 opl render --list-audio    # list input devices + their channel counts, then exit
 ```
 
-## Configure once (`tools/midi/.env`)
+## Configure once (`render-tools: .env`)
 
-Copy `tools/midi/.env.example` to `tools/midi/.env`. Render reads these defaults:
+Copy `render-tools: .env.example` to `render-tools: .env`. Render reads these defaults:
 
 - `OPL_AUDIO_DEVICE` — input/loopback device name (substring), e.g. `BlackHole 2ch`, `Clarett 4Pre`.
 - `OPL_AUDIO_CHANNELS` — capture one stereo pair from a multi-channel interface, 1-based, e.g. `5,6`.
@@ -85,7 +85,7 @@ If audio leads or lags the video, nudge at mux time with `--av-offset <ms>`:
 
 - **No audio in the MP4** → audio routing/loopback not set up, or wrong `--audio-device`
   / `OPL_AUDIO_CHANNELS`. Re-check with `--list-audio`. (The board's audio is **not** on USB.)
-- **Browser won't launch** → `npm install` in `tools/midi/`, or use `--obs`.
+- **Browser won't launch** → `npm install` in `render-tools: `, or use `--obs`.
 - **Inspect intermediates** → `--keep-temps` keeps `video.webm` and `audio.wav`.
 - **ffmpeg missing** → install it; nothing renders without it.
 

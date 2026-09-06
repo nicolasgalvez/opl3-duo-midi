@@ -14,18 +14,6 @@ updates:
     cooldown:
       default-days: 7
 
-  # The opl CLI (easymidi, @tonejs/midi, audify, yargs, playwright)
-  - package-ecosystem: npm
-    directory: /tools/midi
-    schedule:
-      interval: monthly
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: chore
-      include: scope
-    cooldown:
-      default-days: 7
-
   - package-ecosystem: github-actions
     directory: /
     schedule:
