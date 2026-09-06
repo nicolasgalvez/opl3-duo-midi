@@ -11,6 +11,7 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       # Maintains a release PR (version bump + CHANGELOG) from conventional
       # commits, and cuts a GitHub release + tag when that PR is merged.

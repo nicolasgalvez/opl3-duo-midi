@@ -1,7 +1,7 @@
 ---
 name: opl-cli
 description: >-
-  Drive and test the OPL3 Duo synth over USB-MIDI with the `opl` CLI (tools/midi/opl.mjs):
+  Drive and test the OPL3 Duo synth over USB-MIDI with the `opl` CLI (render-tools: opl.mjs):
   list ports, play notes/chords/scales, send program changes and control changes, play
   Standard MIDI Files or folders, serve the web visualizer, and panic stuck notes.
   Use whenever the user wants to test the synth, send MIDI, hear a patch, play a .mid file,
@@ -11,7 +11,7 @@ description: >-
 
 # opl-cli — drive the synth over MIDI
 
-`opl` is the project's Node CLI (`tools/midi/opl.mjs`). Use it to test the firmware end-to-end:
+`opl` is the project's Node CLI (`render-tools: opl.mjs`). Use it to test the firmware end-to-end:
 it sends USB-MIDI to the **OPL3Duo MIDI** device, and the synth plays through the board's
 **stereo line-out**.
 
@@ -26,10 +26,10 @@ jack — the firmware and CLI can be working perfectly with silence over USB. Do
 From the repo root:
 
 ```bash
-npm install && npm link   # makes `opl` global (bin -> tools/midi/opl.mjs)
+npm install && npm link   # makes `opl` global (bin -> render-tools: opl.mjs)
 ```
 
-If `opl` isn't on PATH, run it directly: `node tools/midi/opl.mjs <cmd>`.
+If `opl` isn't on PATH, run it directly: `node render-tools: opl.mjs <cmd>`.
 Always run `opl list` first to confirm the device is connected and named as expected.
 
 ## Command reference
@@ -82,7 +82,7 @@ opl serve favorites.jspf   # serve a curated playlist in the web UI
 
 Track paths resolve **relative to the playlist file's folder first**, then fall back to
 `MIDI_LIBRARY`. Missing entries are skipped with a warning, not fatal. Parser/wiring live in
-`tools/midi/lib/playlist.mjs` (expanded inside `collectFiles`, so all three commands get it).
+`render-tools: lib/playlist.mjs` (expanded inside `collectFiles`, so all three commands get it).
 
 ### Web visualizer — `opl serve`
 
@@ -98,9 +98,9 @@ opl serve "folder" -r --theme winamp        # metallic LCD theme (default "green
 Node owns playback; pick the **output device** in the page (top-right) and press play.
 A 16-channel velocity equalizer is fed live over Server-Sent Events. `Ctrl-C` stops the server.
 
-## `.env` defaults (`tools/midi/.env`)
+## `.env` defaults (`render-tools: .env`)
 
-Copy `tools/midi/.env.example` to `tools/midi/.env`. Relevant to playback:
+Copy `render-tools: .env.example` to `render-tools: .env`. Relevant to playback:
 
 - `MIDI_LIBRARY` — base path; **relative** folder/file args to `serve`/`play` resolve against it
   when not found in the cwd (`opl serve "_Bobby Prince" -r`).
