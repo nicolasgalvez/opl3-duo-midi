@@ -1,0 +1,41 @@
+name: Firmware
+
+# One check: does the firmware still compile for the board it ships on.
+# Reusable so it can be run, edited and required on its own.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    # Cost rule 8: never leave GitHub's 360-minute default in place. Sized from
+    # the observed cold-cache run, not guessed.
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # The Teensy toolchain is a large download; without this every run
+      # re-fetches it. Keyed on platformio.ini so a platform or lib_deps change
+      # invalidates it.
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build firmware (teensy41)
+        run: pio run -e teensy41
