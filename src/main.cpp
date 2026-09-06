@@ -48,7 +48,7 @@ static void onSystemReset() {
 // register log 1:1, bypassing GM voice allocation entirely):
 //   F0 7D 7F <bank> <regHiNibble> <regLoNibble> <valHiNibble> <valLoNibble> F7
 // 0x7D is MIDI's non-commercial/educational manufacturer ID — also used by the
-// unrelated mt32-pi device-control protocol (tools/midi/lib/net/mt32pi.mjs);
+// unrelated mt32-pi device-control protocol (the render-tools repo, lib/net/mt32pi.mjs);
 // different target device, disambiguated here by the 0x7F sub-command byte.
 // reg/value are nibble-split into 7-bit-safe SysEx data bytes.
 constexpr uint8_t SYSEX_MANUFACTURER_ID = 0x7D;

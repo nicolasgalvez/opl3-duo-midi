@@ -29,5 +29,3 @@ Thumbs.db
 *.mp4
 
 # opl library DB (runtime state)
-tools/midi/.opl-library.json
-tools/midi/.opl-uploads/

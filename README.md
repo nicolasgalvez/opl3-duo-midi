@@ -57,7 +57,7 @@ The USB type is set to MIDI via `-D USB_MIDI_SERIAL` in `platformio.ini`.
 
 ## The `opl` CLI
 
-A small Node tool (in `tools/midi/`) for testing and playback over MIDI.
+A small Node tool (in `render-tools: `) for testing and playback over MIDI.
 
 ```bash
 npm install && npm link   # from repo root — makes `opl` global
@@ -183,7 +183,7 @@ opl serve "<folder>" -r --layout overlay     # OBS browser source (transparent b
 opl serve "<folder>" -r --repeat --shuffle   # loop playlist, random order
 ```
 
-Set `OPL_LAYOUT=minimized|overlay` in `.env` (repo root or `tools/midi/.env`).
+Set `OPL_LAYOUT=minimized|overlay` in `.env` (repo root or `render-tools: .env`).
 
 An ANSI/CRT-themed page with a 16-channel velocity **equalizer**, playlist, now-playing
 (track + folder), and transport. Pick the MIDI **output device** in the page (top-right) and
@@ -197,7 +197,7 @@ theme/layout/panel state — on top of the same live SSE equalizer and transport
 `normal`/`minimized`/`overlay` layouts at parity with the renderer.
 
 ```bash
-cd tools/midi/web-app && npm install   # one-time: install the SPA's deps
+cd render-tools: web-app && npm install   # one-time: install the SPA's deps
 opl serve "<folder>" -r                # v2 by default (auto-builds the bundle on first run)
 opl serve "<folder>" -r --ui classic   # opt back to the legacy static page (or OPL_UI=classic)
 ```
@@ -241,8 +241,8 @@ driven by the synth's note events in this mode.
 files onto it (or click to add), search by name/folder, play, or remove. Uploaded files are
 stored **content-addressed** (identical bytes are never duplicated) and the library is a small
 JSON DB ([lowdb](https://github.com/typicode/lowdb)) of **paths + metadata only** (never copies),
-so it survives restarts. Locations: `OPL_LIBRARY_DB` (default `tools/midi/.opl-library.json`) and
-`OPL_UPLOADS_DIR` (default `tools/midi/.opl-uploads/`).
+so it survives restarts. Locations: `OPL_LIBRARY_DB` (default `render-tools: .opl-library.json`) and
+`OPL_UPLOADS_DIR` (default `render-tools: .opl-uploads/`).
 
 ### Headless video renderer (`opl render`)
 
@@ -344,7 +344,7 @@ the specified input device, plays the MIDI file to the synth, then muxes the vid
 and audio into the final MP4.
 
 **Prerequisites:** `ffmpeg` must be installed. Playwright is included in
-`tools/midi/package.json` — run `npm install` in `tools/midi/` if needed.
+`render-tools: package.json` — run `npm install` in `render-tools: ` if needed.
 
 **Audio routing:** The OPL3 board outputs analog audio from its line-out jack. To
 capture it, route the line-out into your computer's audio interface and use a
@@ -375,7 +375,7 @@ list` works from any terminal and the queue survives a runner restart.
 
 ### MIDI library base path + device defaults (`.env`)
 
-Copy `tools/midi/.env.example` to `tools/midi/.env` and set:
+Copy `render-tools: .env.example` to `render-tools: .env` and set:
 
 ```bash
 # Base path to your MIDI collection. Relative `opl serve` / `opl play` paths
@@ -410,7 +410,7 @@ src/
   PatchDisplay.{h,cpp}  SSD1306 patch-name display (compile-time toggle)
   GMNames.h           General MIDI instrument names
   main.cpp            composition root + usbMIDI handlers
-tools/midi/           the `opl` CLI (Node + yargs + easymidi + @tonejs/midi)
+render-tools:            the `opl` CLI (Node + yargs + easymidi + @tonejs/midi)
   lib/format.mjs      shared file-format detection (MIDI vs VGM, by magic bytes)
   lib/vgm.mjs         VGM (OPL2/OPL3 register-log) parsing
   lib/oplRaw.mjs      raw OPL register-write SysEx protocol
@@ -420,7 +420,7 @@ tools/midi/           the `opl` CLI (Node + yargs + easymidi + @tonejs/midi)
 ## Formatting & linting
 
 A pre-commit hook formats only the files you've staged — **clang-format** for
-C/C++ firmware and **ESLint + Prettier** for the `tools/midi` CLI. Install it
+C/C++ firmware and **ESLint + Prettier** for the the render-tools repo CLI. Install it
 once with `npm install` at the repo root (also `brew install clang-format`).
 
 ```bash
