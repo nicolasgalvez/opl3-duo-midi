@@ -12,9 +12,9 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
-    # Cost rule 8: never leave GitHub's 360-minute default in place. Sized from
-    # the observed cold-cache run, not guessed.
-    timeout-minutes: 12
+    # Cost rule 8: never leave GitHub's 360-minute default in place. 3x the
+    # measured cold-cache run (37s) is under the 5-minute floor, so: 5.
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
