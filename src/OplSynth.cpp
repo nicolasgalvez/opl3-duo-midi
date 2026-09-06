@@ -28,7 +28,12 @@ const uint8_t drumChannelsOPL[12] = {6, 7, 8, 15, 16, 17, 24, 25, 26, 33, 34, 35
 }  // namespace
 
 OplSynth::OplSynth()
-    : _opl3(cfg::OPL3_A2, cfg::OPL3_A1, cfg::OPL3_A0, cfg::OPL3_LATCH, cfg::OPL3_RESET) {}
+    // _midi is value-initialised, not merely default-initialised: MidiChannel's
+    // own member initialisers cover volume/expression/pitch, but `instrument`
+    // comes from the OPL2 library and has none. It is read when a note fires
+    // (setInstrument4OP) and only written on a program change, so a note before
+    // the first program change would otherwise read indeterminate RAM.
+    : _opl3(cfg::OPL3_A2, cfg::OPL3_A1, cfg::OPL3_A0, cfg::OPL3_LATCH, cfg::OPL3_RESET), _midi{} {}
 
 void OplSynth::begin() { systemReset(); }
 

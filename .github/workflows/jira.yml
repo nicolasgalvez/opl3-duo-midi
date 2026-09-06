@@ -7,11 +7,12 @@ on:
 jobs:
   jira-sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: procyon-creative/jira-action-man@v2
         id: jira
         with:
-          projects: 'ODM'
+          projects: 'VGM'
           from: 'branch,title,commits,body'
           post_to_jira: true
           jira_comment_mode: update
@@ -23,11 +24,12 @@ jobs:
   jira-transition-qa:
     if: github.event.action == 'opened' || github.event.action == 'reopened'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: procyon-creative/jira-action-man@v2
         id: jira
         with:
-          projects: 'ODM'
+          projects: 'VGM'
           from: 'branch,title,commits,body'
           post_to_jira: false
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -79,11 +81,12 @@ jobs:
   jira-transition-done:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: procyon-creative/jira-action-man@v2
         id: jira
         with:
-          projects: 'ODM'
+          projects: 'VGM'
           from: 'branch,title,commits,body'
           post_to_jira: false
           github_token: ${{ secrets.GITHUB_TOKEN }}
