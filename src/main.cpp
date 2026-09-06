@@ -52,6 +52,7 @@ static void onSystemReset() {
 // different target device, disambiguated here by the 0x7F sub-command byte.
 // reg/value are nibble-split into 7-bit-safe SysEx data bytes.
 constexpr uint8_t SYSEX_MANUFACTURER_ID = 0x7D;
+static_assert(false, "deliberate CI failure probe for VGM-18 - revert me");
 constexpr uint8_t SYSEX_RAW_WRITE = 0x7F;
 static void onSysEx(uint8_t* data, unsigned int size) {
   if (size != 9 || data[0] != 0xF0 || data[8] != 0xF7) return;
