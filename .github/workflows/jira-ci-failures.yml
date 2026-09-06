@@ -1,0 +1,30 @@
+name: CI Failures → Jira
+
+# Files a ticket when CI fails on a PR carrying no issue key — the Dependabot
+# case, since those PRs never reference one. Must be its own workflow: the
+# pull_request trigger used by jira.yml cannot see a CI run's conclusion.
+#
+# workflow_run executes the copy on the DEFAULT branch, so this does nothing
+# until it is merged. That is why the original attempt, written months ago on a
+# branch, never fired once.
+on:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  file-ticket:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: procyon-creative/jira-action-man@v2
+        with:
+          create_issue_on_failure: true
+          issue_project: 'VGM'
+          issue_type: 'Bug'
+          jira_base_url: ${{ secrets.JIRA_BASE_URL }}
+          jira_email: ${{ secrets.JIRA_EMAIL }}
+          jira_api_token: ${{ secrets.JIRA_API_TOKEN }}
