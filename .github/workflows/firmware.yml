@@ -26,7 +26,7 @@ jobs:
       # re-fetches it. Keyed on platformio.ini so a platform or lib_deps change
       # invalidates it.
       - name: Cache PlatformIO
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.platformio
