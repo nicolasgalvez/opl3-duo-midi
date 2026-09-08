@@ -85,6 +85,38 @@ void OplSynth::update() {
   }
 }
 
+/**
+ * The frequency for a note at a given bend, written to one voice.
+ *
+ * Both the note-on path and the pitch-wheel handler carried their own copy of
+ * this arithmetic, and they did not agree: `playMelodic` worked from the note
+ * it had just clamped into the playable range, `pitchChange` from the unclamped
+ * note it had stored. A note below C1 therefore changed pitch class the moment
+ * the wheel moved. `playableNote` is the same clamp `playMelodic` applies
+ * before asking the chip to play anything, so both bend from what is sounding.
+ *
+ * A full bend is two semitones, which is why `notePitches` carries two extra
+ * entries at each end.
+ */
+void OplSynth::writeBentFNumber(uint8_t controlChannel, uint8_t note, int pitch) {
+  const uint8_t baseNote = (playableNote(note) % 12) + 2;
+  // A short-circuit, not a special case: at pitch 0 the arithmetic below scales
+  // the interval by zero and writes this same value.
+  if (pitch == 0) {
+    _opl3.setFNumber(controlChannel, notePitches[baseNote]);
+    return;
+  }
+
+  const float pitchBend = abs(pitch) / 8192.0;
+  if (pitch < 0) {
+    const unsigned int fDelta = (notePitches[baseNote] - notePitches[baseNote - 2]) * pitchBend;
+    _opl3.setFNumber(controlChannel, notePitches[baseNote] - fDelta);
+  } else {
+    const unsigned int fDelta = (notePitches[baseNote + 2] - notePitches[baseNote]) * pitchBend;
+    _opl3.setFNumber(controlChannel, notePitches[baseNote] + fDelta);
+  }
+}
+
 void OplSynth::playMelodic(uint8_t midiChannel, uint8_t note, uint8_t velocity) {
   midiChannel = midiChannel % NUM_MIDI_CHANNELS;
 
@@ -157,24 +189,14 @@ void OplSynth::playMelodic(uint8_t midiChannel, uint8_t note, uint8_t velocity) 
     setOplChannelVolume(oplChannelIndex, midiChannel);
     applyPanning(oplChannelIndex, midiChannel);
 
-    note = max(24, min(note, 119));
-    uint8_t octave = 1 + (note - 24) / 12;
-    uint8_t noteInOctave = note % 12;
+    const uint8_t played = playableNote(note);
     uint8_t controlChannel = _opl3.get4OPControlChannel(oplChannelIndex);
-    _opl3.playNote(controlChannel, octave, noteInOctave);
+    _opl3.playNote(controlChannel, 1 + (played - LOWEST_NOTE) / 12, played % 12);
 
-    int pitch = _midi[midiChannel].pitch;
-    if (pitch != 0) {
-      float pitchBend = abs(pitch) / 8192.0;
-      uint8_t baseNote = noteInOctave + 2;
-      if (pitch < 0) {
-        unsigned int fDelta = (notePitches[baseNote] - notePitches[baseNote - 2]) * pitchBend;
-        _opl3.setFNumber(controlChannel, notePitches[baseNote] - fDelta);
-      } else {
-        unsigned int fDelta = (notePitches[baseNote + 2] - notePitches[baseNote]) * pitchBend;
-        _opl3.setFNumber(controlChannel, notePitches[baseNote] + fDelta);
-      }
-    }
+    // Only when the wheel is off centre: playNote has just written the unbent
+    // frequency, and rewriting it would be the same value again.
+    const int pitch = _midi[midiChannel].pitch;
+    if (pitch != 0) writeBentFNumber(controlChannel, note, pitch);
   }
 }
 
@@ -456,22 +478,10 @@ void OplSynth::controlChange(uint8_t midiChannel, uint8_t control, uint8_t value
 void OplSynth::pitchChange(uint8_t midiChannel, int pitch) {
   midiChannel = midiChannel % NUM_MIDI_CHANNELS;
   _midi[midiChannel].pitch = pitch;
-  float pitchBend = abs(pitch) / 8192.0;
 
   for (uint8_t i = 0; i < NUM_MELODIC_CHANNELS; i++) {
     if (_melodic[i].midiChannel == midiChannel && _melodic[i].note != VALUE_UNDEFINED) {
-      uint8_t controlChannel = _opl3.get4OPControlChannel(i);
-      uint8_t baseNote = (_melodic[i].note % 12) + 2;
-
-      if (pitch < 0) {
-        unsigned int fDelta = (notePitches[baseNote] - notePitches[baseNote - 2]) * pitchBend;
-        _opl3.setFNumber(controlChannel, notePitches[baseNote] - fDelta);
-      } else if (pitch > 0) {
-        unsigned int fDelta = (notePitches[baseNote + 2] - notePitches[baseNote]) * pitchBend;
-        _opl3.setFNumber(controlChannel, notePitches[baseNote] + fDelta);
-      } else {
-        _opl3.setFNumber(controlChannel, notePitches[baseNote]);
-      }
+      writeBentFNumber(_opl3.get4OPControlChannel(i), _melodic[i].note, pitch);
     }
   }
 }
