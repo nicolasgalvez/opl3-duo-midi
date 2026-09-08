@@ -45,6 +45,14 @@ class OplSynth {
   // and may only be included once.
   static bool drumProgramFor(uint8_t note, uint8_t& program);
 
+  // The note the chip is actually asked to play. The OPL3 range this drives is
+  // narrower than MIDI's, so anything outside it is pulled to the nearest end.
+  static constexpr uint8_t LOWEST_NOTE = 24;
+  static constexpr uint8_t HIGHEST_NOTE = 119;
+  static uint8_t playableNote(uint8_t note) {
+    return note < LOWEST_NOTE ? LOWEST_NOTE : (note > HIGHEST_NOTE ? HIGHEST_NOTE : note);
+  }
+
   // Raw register write, bypassing GM voice allocation entirely (ODM-15: VGM
   // playback streams a file's actual OPL register log 1:1). bank selects
   // (synthUnit << 1) | registerPort, per OPL3Duo::write's own addressing.
@@ -98,6 +106,8 @@ class OplSynth {
   void playDrum(uint8_t note, uint8_t velocity);
   void setOplChannelVolume(uint8_t channel4OP, uint8_t midiChannel);
   void applyPanning(uint8_t channel4OP, uint8_t midiChannel);
+  // Write the frequency for `note` bent by `pitch`, on one 4-op voice.
+  void writeBentFNumber(uint8_t controlChannel, uint8_t note, int pitch);
 
   OPL3Duo _opl3;
   MidiChannel _midi[NUM_MIDI_CHANNELS];

@@ -164,6 +164,238 @@ void with_the_wheel_down_nothing_is_written_either_way() {
   TEST_ASSERT_EQUAL_HEX16(played, synth->voiceFNumber(VOICE));
 }
 
+/*
+ * The other half of the same problem the drum base was.
+ *
+ * OplSynth keeps its own `notePitches[16]` — the library's twelve F-numbers
+ * with two semitones of headroom either side for pitch bend. A note-on does
+ * not use it: `playNote` writes the library's own `noteFNumbers`. Bend and
+ * modulation use OplSynth's. The two tables agree today, and nothing said so,
+ * exactly as nothing said the drum base had to match its table.
+ *
+ * Asserted through what a player would notice rather than by comparing arrays:
+ * both of these move the pitch to `notePitches[note % 12 + 2]` and neither is
+ * supposed to change the note.
+ */
+
+void returning_the_pitch_wheel_to_centre_changes_nothing() {
+  short played = playMiddleC();
+
+  synth->pitchChange(CHANNEL, 0);
+
+  TEST_ASSERT_EQUAL_HEX16_MESSAGE(played, synth->voiceFNumber(VOICE),
+                                  "the bend table disagrees with the note-on table");
+}
+
+void and_that_holds_for_every_note_of_the_octave() {
+  // Twelve notes, twelve chances for one entry to have been mistyped.
+  //
+  // A fresh synth per note, because voice allocation hands successive notes to
+  // successive voices: reading voice 0 twelve times over one synth compares
+  // the first note against itself and passes whatever the table says.
+  for (uint8_t note = 60; note < 72; note++) {
+    OplSynth one;
+    one.begin();
+    one.programChange(CHANNEL, 0);
+    one.noteOn(CHANNEL, note, 100);
+    short played = one.voiceFNumber(VOICE);
+
+    one.pitchChange(CHANNEL, 0);
+
+    TEST_ASSERT_EQUAL_HEX16_MESSAGE(played, one.voiceFNumber(VOICE),
+                                    "the bend table disagrees on one note of the octave");
+  }
+}
+
+void a_note_started_while_the_wheel_is_held_is_bent_from_its_own_pitch() {
+  /*
+   * The bend has to be applied at note-on too, or a note played mid-bend comes
+   * out unbent. That path has its own copy of the arithmetic in `playMelodic`,
+   * separate from the one in `pitchChange`, and nothing exercised it.
+   *
+   * A note started with the wheel already up must land where the same note
+   * reaches when the wheel is moved after it — the two copies have to agree.
+   */
+  OplSynth held;
+  held.begin();
+  held.programChange(CHANNEL, 0);
+  held.pitchChange(CHANNEL, 8191);  // wheel up before a note is played
+  held.noteOn(CHANNEL, MIDDLE_C, 100);
+  short startedBent = held.voiceFNumber(VOICE);
+
+  OplSynth bentAfter;
+  bentAfter.begin();
+  bentAfter.programChange(CHANNEL, 0);
+  bentAfter.noteOn(CHANNEL, MIDDLE_C, 100);
+  short unbent = bentAfter.voiceFNumber(VOICE);
+  bentAfter.pitchChange(CHANNEL, 8191);
+
+  TEST_ASSERT_NOT_EQUAL_MESSAGE(unbent, startedBent, "the note was not bent at all");
+  TEST_ASSERT_EQUAL_HEX16_MESSAGE(bentAfter.voiceFNumber(VOICE), startedBent,
+                                  "bending before a note and after it disagree");
+}
+
+void and_the_same_downwards() {
+  OplSynth held;
+  held.begin();
+  held.programChange(CHANNEL, 0);
+  held.pitchChange(CHANNEL, -8192);
+  held.noteOn(CHANNEL, MIDDLE_C, 100);
+
+  OplSynth bentAfter;
+  bentAfter.begin();
+  bentAfter.programChange(CHANNEL, 0);
+  bentAfter.noteOn(CHANNEL, MIDDLE_C, 100);
+  short unbent = bentAfter.voiceFNumber(VOICE);
+  bentAfter.pitchChange(CHANNEL, -8192);
+
+  TEST_ASSERT_LESS_THAN_MESSAGE(unbent, held.voiceFNumber(VOICE), "a downward bend went up");
+  TEST_ASSERT_EQUAL_HEX16(bentAfter.voiceFNumber(VOICE), held.voiceFNumber(VOICE));
+}
+
+void the_bottom_of_a_vibrato_cycle_is_the_note_itself() {
+  // The LFO adds (1 - cos-derived) * depth, which is zero at t = 0. So the
+  // first pass over a held note must land exactly on the played pitch — the
+  // same equality, reached through the other table user.
+  short played = playMiddleC();
+  synth->controlChange(CHANNEL, CC_MODULATION, 127);
+
+  setMillis(0);
+  synth->update();
+
+  TEST_ASSERT_EQUAL_HEX16_MESSAGE(played, synth->voiceFNumber(VOICE),
+                                  "the modulation table disagrees with the note-on table");
+}
+
+void a_drum_does_not_land_on_a_melodic_voice() {
+  /*
+   * `drumChannelsOPL` is a third restated value: the twelve 2-op channels the
+   * twelve 4-op voices leave free. It is right today — the library's
+   * get4OPControlChannel accounts for exactly the other twenty-four — and, as
+   * with the drum base, nothing said it had to be.
+   *
+   * Asserted as the collision it would cause: fill every melodic voice, note
+   * what each is holding, then hit every drum. A drum writing to a channel
+   * that is half of a 4-op voice would move that voice's pitch.
+   */
+  short before[12];
+  for (uint8_t v = 0; v < 12; v++) {
+    synth->noteOn(CHANNEL, 60 + v, 100);
+    before[v] = synth->voiceFNumber(v);
+  }
+
+  for (uint8_t note = 28; note < 40; note++) {
+    synth->noteOn(10, note, 100);  // channel 10, the drums
+  }
+
+  for (uint8_t v = 0; v < 12; v++) {
+    TEST_ASSERT_EQUAL_HEX16_MESSAGE(before[v], synth->voiceFNumber(v),
+                                    "a drum moved a melodic voice's pitch");
+  }
+}
+
+void a_note_below_the_range_is_bent_from_the_note_that_sounds() {
+  /*
+   * The OPL3 range this drives stops at C1, so a lower note is pulled up to it
+   * and that is what the chip plays. The two bend paths used to disagree about
+   * which note that was: the note-on path bent from the clamped note, the
+   * wheel handler from the unclamped one it had stored. Note 20 sounds as
+   * note 24 and used to bend as though it were a G#.
+   */
+  OplSynth low;
+  low.begin();
+  low.programChange(CHANNEL, 0);
+  low.noteOn(CHANNEL, 20, 100);  // below the range; sounds as 24
+  short sounding = low.voiceFNumber(VOICE);
+
+  low.pitchChange(CHANNEL, 0);  // wheel at centre must not move it
+
+  TEST_ASSERT_EQUAL_HEX16_MESSAGE(sounding, low.voiceFNumber(VOICE),
+                                  "the wheel moved a clamped note off its pitch");
+}
+
+void and_one_above_it_too() {
+  OplSynth high;
+  high.begin();
+  high.programChange(CHANNEL, 0);
+  high.noteOn(CHANNEL, 126, 100);  // above the range; sounds as 119
+  short sounding = high.voiceFNumber(VOICE);
+
+  high.pitchChange(CHANNEL, 0);
+
+  TEST_ASSERT_EQUAL_HEX16(sounding, high.voiceFNumber(VOICE));
+}
+
+void a_full_bend_up_is_two_semitones() {
+  /*
+   * How far the wheel reaches, not just that it moves. Middle C sits at 0x156
+   * and the D two semitones above it at 0x181 — the entry `notePitches` carries
+   * the headroom for. A full bend has to arrive there and no further.
+   *
+   * 8191 rather than 8192 is the top of the MIDI range, so the result lands a
+   * count short of the interval; hence the tolerance of one.
+   */
+  playMiddleC();
+
+  synth->pitchChange(CHANNEL, 8191);
+
+  TEST_ASSERT_INT_WITHIN_MESSAGE(1, 0x181, synth->voiceFNumber(VOICE),
+                                 "a full bend up did not reach two semitones");
+}
+
+void a_full_bend_down_is_two_semitones() {
+  // Downwards the range is exact: -8192 is a full 1.0 of the interval, from
+  // 0x156 to the A# two semitones below at 0x132.
+  playMiddleC();
+
+  synth->pitchChange(CHANNEL, -8192);
+
+  TEST_ASSERT_EQUAL_HEX16_MESSAGE(0x132, synth->voiceFNumber(VOICE),
+                                  "a full bend down did not reach two semitones");
+}
+
+void half_a_bend_is_about_one_semitone() {
+  // The middle of the range, so the bend cannot be a step function that happens
+  // to hit both ends.
+  playMiddleC();
+
+  synth->pitchChange(CHANNEL, 4096);
+
+  // Half of the two-semitone interval above C: 0x156 + (0x181 - 0x156) / 2.
+  TEST_ASSERT_INT_WITHIN(1, 0x156 + (0x181 - 0x156) / 2, synth->voiceFNumber(VOICE));
+}
+
+void a_note_under_the_range_sounds_as_the_lowest_one() {
+  // What the clamp is for. Note 20 has no frequency on this chip; it comes out
+  // as C1, and if it did not it would come out as something else entirely.
+  OplSynth low;
+  low.begin();
+  low.programChange(CHANNEL, 0);
+  low.noteOn(CHANNEL, 20, 100);
+
+  OplSynth lowest;
+  lowest.begin();
+  lowest.programChange(CHANNEL, 0);
+  lowest.noteOn(CHANNEL, 24, 100);
+
+  TEST_ASSERT_EQUAL_HEX16_MESSAGE(lowest.voiceFNumber(VOICE), low.voiceFNumber(VOICE),
+                                  "a note below the range did not sound as the lowest one");
+}
+
+void a_note_over_the_range_sounds_as_the_highest_one() {
+  OplSynth high;
+  high.begin();
+  high.programChange(CHANNEL, 0);
+  high.noteOn(CHANNEL, 126, 100);
+
+  OplSynth highest;
+  highest.begin();
+  highest.programChange(CHANNEL, 0);
+  highest.noteOn(CHANNEL, 119, 100);
+
+  TEST_ASSERT_EQUAL_HEX16(highest.voiceFNumber(VOICE), high.voiceFNumber(VOICE));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(a_released_note_keeps_the_pitch_it_was_played_at);
@@ -174,5 +406,18 @@ int main() {
   RUN_TEST(a_note_held_by_the_sustain_pedal_still_modulates);
   RUN_TEST(aftertouch_reaches_a_held_note_and_not_a_released_one);
   RUN_TEST(with_the_wheel_down_nothing_is_written_either_way);
+  RUN_TEST(returning_the_pitch_wheel_to_centre_changes_nothing);
+  RUN_TEST(and_that_holds_for_every_note_of_the_octave);
+  RUN_TEST(a_note_started_while_the_wheel_is_held_is_bent_from_its_own_pitch);
+  RUN_TEST(and_the_same_downwards);
+  RUN_TEST(a_note_below_the_range_is_bent_from_the_note_that_sounds);
+  RUN_TEST(and_one_above_it_too);
+  RUN_TEST(a_full_bend_up_is_two_semitones);
+  RUN_TEST(a_full_bend_down_is_two_semitones);
+  RUN_TEST(half_a_bend_is_about_one_semitone);
+  RUN_TEST(a_note_under_the_range_sounds_as_the_lowest_one);
+  RUN_TEST(a_note_over_the_range_sounds_as_the_highest_one);
+  RUN_TEST(the_bottom_of_a_vibrato_cycle_is_the_note_itself);
+  RUN_TEST(a_drum_does_not_land_on_a_melodic_voice);
   return UNITY_END();
 }
