@@ -40,6 +40,14 @@ void OplSynth::begin() { systemReset(); }
 // Modulation / aftertouch LFO. Cheap when no channel is modulating.
 void OplSynth::update() {
   for (uint8_t i = 0; i < NUM_MELODIC_CHANNELS; i++) {
+    // Only a voice that is holding a note. A released slot keeps pointing at
+    // its MIDI channel with `note` left at VALUE_UNDEFINED, and 255 % 12 is 3,
+    // so the arithmetic below quietly produced a D# for it — written to a
+    // channel whose envelope was still ringing out. Every released note bent
+    // to the same wrong pitch while the mod wheel was up. `pitchChange` has
+    // always asked this question; this loop never did.
+    if (_melodic[i].note == VALUE_UNDEFINED) continue;
+
     uint8_t midiChannel = _melodic[i].midiChannel;
     float modulation = max(_midi[midiChannel].modulation, _midi[midiChannel].afterTouch);
     if (modulation > 0.0f) {

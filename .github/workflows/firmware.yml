@@ -1,7 +1,8 @@
 name: Firmware
 
-# One check: does the firmware still compile for the board it ships on.
-# Reusable so it can be run, edited and required on its own.
+# Two checks: does the firmware still compile for the board it ships on, and do
+# the parts of it that are ordinary C++ still behave. Reusable so it can be run,
+# edited and required on its own.
 on:
   workflow_call:
 
@@ -13,7 +14,8 @@ jobs:
     name: build
     runs-on: ubuntu-latest
     # Cost rule 8: never leave GitHub's 360-minute default in place. 3x the
-    # measured cold-cache run (37s) is under the 5-minute floor, so: 5.
+    # measured cold-cache run (37s) is under the 5-minute floor, so: 5. The
+    # native tests add about a second to that.
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
@@ -39,3 +41,9 @@ jobs:
 
       - name: Build firmware (teensy41)
         run: pio run -e teensy41
+
+      # The synth's decisions are ordinary C++ and run on the runner: see the
+      # native environment in platformio.ini for what is stubbed and what is
+      # the real library.
+      - name: Test on the host (native)
+        run: pio test -e native -f test_native

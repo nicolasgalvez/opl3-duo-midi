@@ -38,6 +38,15 @@ class OplSynth {
   // (synthUnit << 1) | registerPort, per OPL3Duo::write's own addressing.
   void rawWrite(uint8_t bank, uint8_t reg, uint8_t value) { _opl3.write(bank, reg, value); }
 
+  // What the chip is holding as the frequency of a 4-op voice.
+  //
+  // The synth's decisions reach the world only as register writes, and a test
+  // running on a development machine has no chip to read them back from. The
+  // library keeps shadow copies of everything it sends, so this asks it.
+  short voiceFNumber(uint8_t channel4OP) {
+    return _opl3.getFNumber(_opl3.get4OPControlChannel(channel4OP));
+  }
+
   // Eased left/right output level (0..1), MIDI-derived, for VU LEDs.
   float levelLeft() const { return _vuL; }
   float levelRight() const { return _vuR; }
