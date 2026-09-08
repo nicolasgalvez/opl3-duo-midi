@@ -33,6 +33,18 @@ class OplSynth {
 
   void panic();  // immediate all-sound / all-notes off
 
+  // Which entry of the library's drum table a MIDI note selects; false if the
+  // note is not one of the drums.
+  //
+  // Its own function because the number it subtracts is the one thing here
+  // that has to agree with the table, and it used to be a copy that did not:
+  // OplSynth carried DRUM_NOTE_BASE = 27 while midi_drums.h, included in the
+  // very same file, says 28. Every drum came out one slot high — a snare
+  // played as a hand clap. The constant now comes from the table's own header,
+  // which is also why this is defined in the .cpp: that header defines arrays
+  // and may only be included once.
+  static bool drumProgramFor(uint8_t note, uint8_t& program);
+
   // Raw register write, bypassing GM voice allocation entirely (ODM-15: VGM
   // playback streams a file's actual OPL register log 1:1). bank selects
   // (synthUnit << 1) | registerPort, per OPL3Duo::write's own addressing.
@@ -57,8 +69,6 @@ class OplSynth {
   static constexpr uint8_t NUM_DRUM_CHANNELS = 12;
   static constexpr uint8_t MIDI_DRUM_CHANNEL = 10;
   static constexpr uint8_t VALUE_UNDEFINED = 255;
-  static constexpr uint8_t DRUM_NOTE_BASE = 27;
-  static constexpr uint8_t NUM_MIDI_DRUMS = 60;
 
   struct MidiChannel {
     Instrument4OP instrument;

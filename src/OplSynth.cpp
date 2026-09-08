@@ -178,13 +178,19 @@ void OplSynth::playMelodic(uint8_t midiChannel, uint8_t note, uint8_t velocity) 
   }
 }
 
+bool OplSynth::drumProgramFor(uint8_t note, uint8_t& program) {
+  // DRUM_NOTE_BASE and NUM_MIDI_DRUMS come from midi_drums.h, the header that
+  // defines the very table being indexed. midi_drums_4op.h declares an array
+  // of the same name and the same contents with a different base, and it is
+  // that number this used to carry.
+  if (note < DRUM_NOTE_BASE || note >= DRUM_NOTE_BASE + NUM_MIDI_DRUMS) return false;
+  program = note - DRUM_NOTE_BASE;
+  return true;
+}
+
 void OplSynth::playDrum(uint8_t note, uint8_t velocity) {
   uint8_t program;
-  if (note >= DRUM_NOTE_BASE && note < DRUM_NOTE_BASE + NUM_MIDI_DRUMS) {
-    program = note - DRUM_NOTE_BASE;
-  } else {
-    return;
-  }
+  if (!drumProgramFor(note, program)) return;
 
   uint8_t oplChannelIndex = VALUE_UNDEFINED;
   unsigned long oldest = -1;
