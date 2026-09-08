@@ -46,4 +46,4 @@ jobs:
       # native environment in platformio.ini for what is stubbed and what is
       # the real library.
       - name: Test on the host (native)
-        run: pio test -e native -f test_native
+        run: pio test -e native
