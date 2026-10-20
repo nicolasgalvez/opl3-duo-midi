@@ -1,6 +1,6 @@
 {
   "name": "opl3-duo-midi-tooling",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Firmware for the OPL3 Duo MIDI project (C++/PlatformIO), plus repo-wide formatting hooks. The companion opl CLI moved to nicolasgalvez/render-tools.",
   "type": "module",
